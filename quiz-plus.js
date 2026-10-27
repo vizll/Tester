@@ -632,7 +632,7 @@
       const help = el('button.icon-btn.sm', { type: 'button', title: 'How moves work', aria: { label: 'How moves work in this game' }, on: { click: () => { const g = P.progress(); SS.ui.toast(`${P.games.get(P.game())?.rules || ''} Every ${g.need} correct answers unlock ${U.plural(g.grant, 'move')}.`, { icon: 'info', timeout: 7000 }); } } }, SS.icon('help', 16));
       const hide = el('button.icon-btn.sm', { type: 'button', title: 'Hide the game', aria: { label: 'Hide the game panel' }, on: { click: () => { s.panel.visible = false; P.save(); layout(); left.focus({ preventScroll: true }); } } }, SS.icon('eyeOff', 16));
       const bodyEl = el('div.gp-body', { tabIndex: -1 });
-      root.append(el('header.gp-head', el('div.gp-pick', select, moves), el('div.gp-tools', help, gear, hide)), bodyEl);
+      root.append(el('header.gp-head', select, moves, el('div.gp-tools', help, gear, hide)), bodyEl);
       let mounted = null, mountedId = null;
       function mountGame() {
         const id = P.game();

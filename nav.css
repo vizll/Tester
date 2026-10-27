@@ -78,6 +78,7 @@ body.nav-collapsed .nav-collapse { top: 66px; }
 @media (max-width: 700px) {
   body.has-nav .app, body.has-nav.nav-collapsed .app { width: calc(100% - 24px); margin: 0 auto; }
   .nav-menu-btn { display: inline-flex; }
+  body.has-nav .brand { display: none; }
   .nav-side { inset: 0 auto 0 0; width: min(300px, 86vw); border-radius: 0 22px 22px 0; transform: translateX(-104%); background: var(--ui-bg); color: var(--ui-text); --c-text: var(--ui-text); --c-muted: var(--ui-muted); --c-fill: var(--ui-fill); --c-fill-2: var(--ui-fill-2); --c-line: var(--ui-line); z-index: 95; visibility: hidden; }
   .nav-side .nav-item, .nav-side .nav-add { color: var(--ui-text); }
   .nav-side .nav-who span, .nav-side .nav-saved, .nav-side .nav-more { color: var(--ui-muted); }

@@ -466,6 +466,74 @@ test('chess vs Stockfish: move costs one, bot reply free; reset during search ig
   eq(await page.evaluate(() => SS.play.data('chess').game.history.length), 2, 'exactly one bot reply after navigation');
 }, { timeout: 90000 });
 
+test('tetris: positioning is free, a locked piece costs one, clearing the target counts one win', async ({ page }) => {
+  await page.evaluate(() => {
+    const board = Array.from({ length: 20 }, () => Array(10).fill(''));
+    board[19] = ['Z', 'Z', 'Z', '', '', '', '', 'S', 'S', 'S'];
+    SS.play.data('tetris').game = { id: 't1', board, bag: ['O'], next: 'T', piece: { type: 'I', x: 3, y: 0, rot: 0 }, lines: 4, score: 0, moves: 0, won: false, winCounted: false, over: false, goal: 5 };
+    SS.play.setGame('tetris'); SS.play.state.actions.tetris = 2; SS.play.save(); SS.quiz.open('practice');
+  });
+  await page.waitForSelector('.ag-tetris-board');
+  await page.focus('.ag-tetris-board');
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowLeft');
+  eq((await play(page)).actions.tetris, 2, 'moving is free');
+  await page.keyboard.press('Space');
+  const p = await play(page);
+  eq(p.actions.tetris, 1, 'lock costs one'); eq(p.wins.tetris, 1, 'line target reached → one win');
+  eq(await page.evaluate(() => SS.play.data('tetris').game.lines), 5, 'line cleared');
+  await page.keyboard.press('Space');
+  eq((await play(page)).wins.tetris, 1, 'further pieces add no wins');
+});
+
+test('every built-in theme renders Home and Quiz without console errors', async ({ page }) => {
+  const ids = await page.evaluate(() => SS.ws.all().map(w => w.id));
+  for (const id of ids) {
+    await page.evaluate(i => { SS.ws.switchTo(i, { instant: true }); SS.nav.go('home'); }, id);
+    await page.waitForTimeout(250);
+    await page.evaluate(() => SS.nav.go('quiz'));
+    await page.waitForTimeout(150);
+  }
+  assert(ids.length >= 11, 'all built-in themes present');
+});
+
+test('chess without Stockfish (worker blocked): the built-in bot replies, retry is offered', async ({ browser }) => {
+  const { page, context, errors } = await open(browser, { before: (p, ctx) => ctx.route('**/vendor/stockfish-19-lite-single.js', r => r.fulfill({ status: 404, body: '' })) });
+  try {
+    await page.evaluate(() => { SS.play.setGame('chess'); SS.play.state.actions.chess = 2; SS.play.save(); SS.quiz.open('practice'); });
+    await page.waitForSelector('.ss-chess-square[data-sq="e2"]');
+    await page.waitForFunction(() => /simple built-in bot/.test(document.querySelector('.ss-chess-status').textContent), null, { timeout: 25000 });
+    assert(await page.isVisible('button:has-text("Retry Stockfish")'), 'retry offered');
+    await page.click('.ss-chess-square[data-sq="d2"]'); await page.click('.ss-chess-square[data-sq="d4"]');
+    await page.waitForFunction(() => SS.play.data('chess').game.history.length === 2, null, { timeout: 10000 });
+    eq((await play(page)).actions.chess, 1, 'one move used, fallback reply free');
+    assert(!errors.filter(e => !/stockfish|404/i.test(e)).length, 'no unexpected errors: ' + errors.join('; '));
+  } finally { await context.close(); }
+}, { own: true, timeout: 60000 });
+
+test('cleanup: repeated navigation and game switching leave no extra listeners or workers', async ({ browser }) => {
+  const { page, context } = await open(browser, { before: p => p.addInitScript(() => {
+    const W = window.Worker; window.__workers = { made: 0, ended: 0 };
+    window.Worker = class extends W { constructor(...a) { super(...a); window.__workers.made++; } terminate() { window.__workers.ended++; return super.terminate(); } };
+  }) });
+  try {
+    await page.evaluate(() => { SS.play.setGame('chess'); SS.quiz.open('practice'); });
+    await page.waitForSelector('.ss-chess-square');
+    await page.evaluate(() => SS.nav.go('home')); await page.waitForTimeout(200);
+    const base = await page.evaluate(() => SS.bus.size());
+    for (let i = 0; i < 6; i++) {
+      await page.evaluate(() => SS.quiz.open('practice')); await page.waitForSelector('.gp .ag-game');
+      for (const g of ['solitaire', '2048', 'tetris', 'chess']) await page.selectOption('.gp-select', g);
+      await page.evaluate(() => SS.quiz.open('games', { game: 'tetris' })); await page.waitForTimeout(80);
+      await page.evaluate(() => SS.nav.go('home')); await page.waitForTimeout(80);
+    }
+    await page.waitForTimeout(500);
+    const after = await page.evaluate(() => ({ bus: SS.bus.size(), w: window.__workers, games: document.querySelectorAll('.ag-game').length }));
+    eq(after.bus, base, 'event subscriptions back to the baseline');
+    eq(after.games, 0, 'no game left mounted off-screen');
+    eq(after.w.made - after.w.ended, 0, `every Stockfish worker terminated (${after.w.made} started)`);
+  } finally { await context.close(); }
+}, { own: true, timeout: 90000 });
+
 test('chess: inline promotion picker, saved position restored after reload', async ({ page }) => {
   await page.evaluate(() => { const d = SS.play.data('chess'); d.game = { id: 'p1', history: ['a4', 'b5', 'axb5', 'a6', 'bxa6', 'Bb7', 'axb7', 'Nc6'], won: false, winCounted: false }; SS.play.setGame('chess'); SS.play.state.actions.chess = 2; SS.play.save(); SS.quiz.open('practice'); });
   await page.waitForSelector('.ss-chess-square[data-sq="b7"] .ss-chess-piece.white');
@@ -557,6 +625,34 @@ test('custom tabs: start empty, independent layouts, reorder, rename, delete+und
   eq(await page.evaluate(() => SS.ws.state.order), order, 'order restored');
   eq(await page.evaluate(() => SS.prefs.get('sidebar').width), width, 'width restored');
   eq(await page.$$eval('.widget', ns => ns.map(n => n.dataset.type)), ['timer'], 'tab layout restored');
+});
+
+test('sidebar: drag a tab to reorder it with the mouse', async ({ page }) => {
+  const id = await page.evaluate(() => SS.ws.createPage({ name: 'Dragged' }).id);
+  const from = await page.locator(`.nav-row[data-id="${id}"] .nav-item`).boundingBox();
+  const to = await page.locator('.nav-row[data-id="home"] .nav-item').boundingBox();
+  await page.mouse.move(from.x + 40, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 40, from.y - 10, { steps: 4 });
+  await page.mouse.move(to.x + 40, to.y + 4, { steps: 6 });
+  await page.mouse.up();
+  eq(await page.evaluate(() => SS.ws.state.order[0]), id, 'dragged tab is now first');
+  eq(await page.evaluate(() => SS.ws.view()), 'home', 'dragging did not also open the tab');
+});
+
+test('keyboard focus is visible on sidebar, quiz answers, divider and board', async ({ page }) => {
+  const setId = await addSet(page, CARDS);
+  await page.evaluate(id => SS.quiz.practice(id), setId);
+  await page.waitForSelector('.qz-quiz select');
+  await page.click('.qz-quiz button:has-text("Start quiz")');
+  await page.waitForSelector('.qz-question');
+  const outlineOf = sel => page.evaluate(s => { const n = document.querySelector(s); n.focus(); const cs = getComputedStyle(n); return cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 2 || cs.boxShadow !== 'none'; }, sel);
+  await page.keyboard.press('Tab'); // switch the page into keyboard modality for :focus-visible
+  for (const sel of ['.nav-row[data-id="quiz"] .nav-item', '.qz-divider', '.qz-tab.on', '.gp-select']) assert(await outlineOf(sel), `visible focus on ${sel}`);
+  if (await page.$('.qz-option')) assert(await outlineOf('.qz-option'), 'visible focus on an answer option');
+  await page.selectOption('.gp-select', 'chess');
+  await page.waitForSelector('.ss-chess-square[data-sq="e2"]');
+  assert(await outlineOf('.ss-chess-square[tabindex="0"]'), 'visible focus on a chess square');
 });
 
 /* ======================= Migration & backup ======================= */

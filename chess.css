@@ -16,7 +16,7 @@
 .ss-chess-square.capture::before { content: ''; position: absolute; inset: 6%; border-radius: 50%; border: max(3px, .7cqw) solid rgba(28,110,80,.8); box-shadow: 0 0 0 2px rgba(255,255,255,.45); z-index: 2; }
 .ss-chess-square:focus-visible { outline: 3px solid #fff; outline-offset: -3px; box-shadow: inset 0 0 0 6px #1d3557; z-index: 3; }
 .ss-chess-piece { font-family: var(--chess-font), Georgia, 'Times New Roman', serif; font-size: calc(100cqw / 8 * .78); line-height: 1; text-shadow: 0 2px 2px rgba(0,0,0,.5); pointer-events: none; user-select: none; }
-.ss-chess-piece.white { color: var(--chess-white); -webkit-text-stroke: .5px rgba(31,43,50,.45); }
+.ss-chess-piece.white { color: var(--chess-white); -webkit-text-stroke: max(.6px, .25cqw) rgba(16,26,36,.8); text-shadow: 0 1px 2px rgba(0,0,0,.55), 0 0 1px rgba(0,0,0,.6); }
 .ss-chess-piece.black { color: var(--chess-black); -webkit-text-stroke: .4px rgba(255,255,255,.5); }
 .ss-chess-rank, .ss-chess-file { position: absolute; font-size: max(8px, calc(100cqw / 8 * .17)); font-weight: 700; line-height: 1; color: #172e44; background: rgba(255,255,255,.55); padding: 1px 2px; border-radius: 2px; pointer-events: none; }
 .ss-chess-rank { top: 2px; left: 2px; }

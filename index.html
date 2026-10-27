@@ -1532,7 +1532,9 @@ dialog .wl-desc { color: var(--ui-muted); }
   const handlers = new Map();
   SS.bus = {
     on(evt, fn) { if (!handlers.has(evt)) handlers.set(evt, new Set()); handlers.get(evt).add(fn); return () => handlers.get(evt)?.delete(fn); },
-    emit(evt, payload) { const set = handlers.get(evt); if (!set) return; [...set].forEach(fn => { try { fn(payload); } catch (err) { console.error(`[Tester] ${evt} handler failed`, err); } }); }
+    emit(evt, payload) { const set = handlers.get(evt); if (!set) return; [...set].forEach(fn => { try { fn(payload); } catch (err) { console.error(`[Tester] ${evt} handler failed`, err); } }); },
+    /* number of live subscriptions (used by the automated leak checks) */
+    size: () => [...handlers.values()].reduce((n, set) => n + set.size, 0)
   };
 })(window.SS = window.SS || {});
 </script>
@@ -4279,6 +4281,7 @@ dialog .wl-desc { color: var(--ui-muted); }
 
   /* Find a home for a new widget and mount it */
   D.add = (type, opts = {}) => {
+    if (!D.active) SS.nav.go('home', { focus: false });   // e.g. "Add widget" chosen while the Quiz tab is open
     const w = ws(); const def = SS.registry.get(type); if (!def) return null;
     const inst = SS.registry.newInstance(type, { size: opts.size, config: opts.config, title: opts.title, style: opts.style });
     if (def.onCreate) safe(() => def.onCreate(inst));
@@ -7382,7 +7385,7 @@ dialog .wl-desc { color: var(--ui-muted); }
       el('button.btn.btn-sm', { type: 'button', on: { click: async () => {
         const ws = SS.ws.surface();
         if (ws.widgets.length && !(await SS.ui.confirm({ title: `Use the “${t.name}” layout?`, message: `The ${U.plural(ws.widgets.length, 'widget')} on “${ws.name}” will be replaced. Notes, assignments and everything else you’ve saved are kept. You can undo this.`, ok: 'Apply layout', danger: false }))) return;
-        dlg.close(); SS.ws.applyTemplate(t.id);
+        dlg.close(); if (!SS.dash.active) SS.nav.go('home', { focus: false }); SS.ws.applyTemplate(t.id);
       } } }, 'Apply'))));
     dlg.body.append(grid, el('p.panel-note', SS.icon('info', 14), el('span', { text: 'Want to keep your current arrangement too? Duplicate this theme first in Customize → Themes.' })));
   };
@@ -8302,6 +8305,8 @@ dialog .wl-desc { color: var(--ui-muted); }
       if (notices.length) SS.ui.toast(`Some saved data (${notices.join(', ')}) couldn’t be read. A copy was kept and the rest loaded normally.`, { kind: 'error', timeout: 0 });
       if (SS.store.mode === 'memory') SS.ui.toast('This browser is blocking storage, so changes won’t be kept after you close the tab. Export a backup from Customize → Data.', { kind: 'error', timeout: 0 });
       if (isNew || (meta.migratedFrom && !SS.prefs.get('upgradeSeen')) || !SS.prefs.get('onboarded')) setTimeout(() => SS.panels.welcome(), 350);
+      else if (meta.whatsNew !== 3) setTimeout(() => SS.ui.toast('What’s new: study sets, quizzes and your games now live in the Quiz tab — 3 correct answers unlock 3 moves, with the game right beside your questions. Points and the shop are gone; your moves, wins and profile looks were kept.', { icon: 'sparkles', timeout: 0, action: { label: 'Open Quiz', fn: () => SS.nav.go('quiz') } }), 600);
+      meta.whatsNew = 3; SS.store.save('meta', () => meta);
       SS.bus.on('prefs', ({ key }) => { if (key === 'weekStart' || key === 'hour12') SS.bus.emit('day'); });
     } catch (err) {
       console.error('[Tester] failed to start', err);
