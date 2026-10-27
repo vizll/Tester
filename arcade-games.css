@@ -1,54 +1,68 @@
-/* All game surfaces inherit the workspace typography and dialog palette. */
-.ag-game { width:100%; display:flex; flex-direction:column; gap:14px; color:var(--c-text,var(--ui-text)); }
-.ag-game .btn { min-height:36px; }
-.ag-score { display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:.83rem; font-weight:700; }
-.ag-score > span { padding:7px 11px; border-radius:10px; background:var(--c-fill,var(--ui-fill)); }
-.ag-status { min-height:2.7em; font-size:.84rem; line-height:1.45; color:var(--c-muted,var(--ui-muted)); }
-.ag-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; }
-.ag-settings { border:1px solid var(--c-line,var(--ui-line)); border-radius:12px; padding:11px 14px; background:var(--c-fill,var(--ui-fill)); }
-.ag-settings > summary { cursor:pointer; font-size:.85rem; font-weight:700; padding:2px 0; }
-.ag-settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 18px; padding:16px 0 3px; }
-.ag-field { display:flex; flex-direction:column; align-items:stretch; gap:6px; font-size:.8rem; font-weight:600; min-width:0; }
-.ag-field > input[type=checkbox] { width:20px; height:20px; accent-color:var(--accent); }
-.ag-field input[type=range] { accent-color:var(--accent); width:100%; }
-.ag-field .hint { font-weight:400; font-size:.73rem; }
-.ag-color { border:1px solid var(--c-line,var(--ui-line)); border-radius:8px; height:36px; width:100%; padding:3px; background:var(--c-bg,var(--ui-bg)); cursor:pointer; }
-.ag-direction-pad { display:flex; flex-direction:column; gap:6px; align-items:center; }
-.ag-direction-pad > div { display:flex; gap:6px; }
-.ag-direction-pad button { min-width:54px; font-size:1.15rem; }
-.ag-2048-board { display:grid; width:min(100%,410px); align-self:center; border-radius:14px; touch-action:none; user-select:none; }
-.ag-2048-cell { aspect-ratio:1; min-width:0; border-radius:var(--ag-tile-radius,9px); display:flex; align-items:center; justify-content:center; font-size:clamp(20px,5.5vw,34px); font-weight:800; font-family:var(--font-display,system-ui,sans-serif); line-height:1; box-shadow:inset 0 1px 0 rgba(255,255,255,.14); }
-.ag-sol-scroll { overflow-x:auto; padding-bottom:9px; width:100%; overscroll-behavior-x:contain; }
-.ag-sol-board { --ag-card-h:94px; --ag-card-w:65px; --ag-table:#1c6558; --ag-card-back:#3454a1; --ag-card-face:#fffdf5; min-width:540px; width:100%; padding:16px 12px 25px; border-radius:14px; background:var(--ag-table); box-shadow:inset 0 1px 16px rgba(0,0,0,.13); }
-.ag-sol-upper,.ag-sol-columns { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:9px; }
-.ag-sol-upper { margin-bottom:24px; }
-.ag-card { position:relative; width:100%; height:var(--ag-card-h); max-height:var(--ag-card-h); border-radius:6px; border:1px solid rgba(20,30,40,.23); font-family:var(--ag-card-font,Georgia,serif); box-shadow:0 2px 3px rgba(0,0,0,.15); user-select:none; touch-action:manipulation; }
-.ag-card:disabled { opacity:1; cursor:default; }
-.ag-card.ag-face { background:var(--ag-card-face); }
-.ag-card-corner { position:absolute; left:5px; top:3px; font-size:16px; font-weight:700; line-height:1; letter-spacing:-1.7px; white-space:nowrap; }
-.ag-card-suit { font-size:31px; position:absolute; top:50%; left:50%; transform:translate(-50%,-38%); }
-.ag-card-count { position:absolute; bottom:2px; right:4px; font:600 9px/1.3 var(--font-body,system-ui); border-radius:3px; padding:1px 3px; background:rgba(0,0,0,.08); }
-.ag-card.ag-selected { outline:3px solid #f2d555; outline-offset:1px; z-index:2; box-shadow:0 0 13px rgba(255,224,100,.45); }
-.ag-back { background:var(--ag-card-back); color:rgba(255,255,255,.8); border:3px solid var(--ag-card-face); display:flex; align-items:center; justify-content:center; font-size:26px; }
-[data-pattern=diamonds] .ag-back { background-image:repeating-linear-gradient(45deg,transparent,transparent 7px,rgba(255,255,255,.12) 7px,rgba(255,255,255,.12) 8px),repeating-linear-gradient(-45deg,transparent,transparent 7px,rgba(255,255,255,.12) 7px,rgba(255,255,255,.12) 8px); }
-[data-pattern=stripes] .ag-back { background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(255,255,255,.15) 4px,rgba(255,255,255,.15) 6px); }
-.ag-stock { flex-direction:column; gap:4px; }
-.ag-stock small { font:700 11px var(--font-body,system-ui); }
-.ag-card.ag-sol-empty { display:flex; align-items:center; justify-content:center; border:1.5px dashed rgba(255,255,255,.4); color:rgba(255,255,255,.67); background:rgba(0,0,0,.09); box-shadow:none; font-size:15px; }
-.ag-card.ag-foundation-empty { font-size:28px; }
-.ag-sol-column { position:relative; min-height:var(--ag-card-h); }
-.ag-sol-column > .ag-card { position:absolute; left:0; top:0; }
-.ag-sol-column > .ag-card.ag-selected { z-index:auto; }
-.ag-tetris-layout { display:flex; align-items:flex-start; justify-content:center; gap:20px; width:100%; }
-.ag-tetris-board { display:grid; grid-template-columns:repeat(10,1fr); width:min(66%,260px); flex-shrink:0; padding:4px; border:1px solid rgba(128,150,180,.25); border-radius:8px; overflow:hidden; }
-.ag-tetris-cell { aspect-ratio:1; min-width:0; border:1px solid rgba(150,180,210,.08); border-radius:var(--ag-block-radius,3px); }
-.ag-tetris-cell.ag-filled { box-shadow:inset 0 2px 0 rgba(255,255,255,.25),inset 0 -2px 0 rgba(0,0,0,.2); border:1px solid rgba(0,0,0,.16); }
-.ag-tetris-cell.ag-ghost { border:2px solid; opacity:.6; }
-.ag-tetris-board.ag-no-grid .ag-tetris-cell:not(.ag-filled):not(.ag-ghost) { border-color:transparent; }
-.ag-tetris-aside { width:110px; display:flex; flex-direction:column; gap:14px; }
-.ag-next-label { font-size:.67rem; letter-spacing:.12em; font-weight:800; color:var(--c-muted,var(--ui-muted)); }
-.ag-tetris-next { display:grid; width:80px; align-self:flex-start; }
-.ag-tetris-next i { aspect-ratio:1; border-radius:3px; border:1px solid rgba(128,150,180,.1); }
-.ag-tetris-controls .btn { min-width:50px; }
-@media (min-width:750px) { .ag-sol-board { --ag-card-h:112px; } .ag-card-corner { font-size:18px; } .ag-card-suit { font-size:38px; } }
-@media (max-width:440px) { .ag-settings-grid { grid-template-columns:1fr; } .ag-tetris-layout { gap:12px; } .ag-tetris-aside { width:85px; } .ag-tetris-next { width:64px; } .ag-tetris-controls { gap:5px; } .ag-tetris-controls .btn { padding:8px 10px; } .ag-2048-cell { font-size:clamp(20px,7vw,32px); } }
+/* Tester — 2048, Solitaire and Tetris. Boards are sized from the panel they sit in (container units on
+   .ag-stage), not from the browser window, so they stay legible in a narrow docked panel. */
+.ag-game { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 10px; color: var(--c-text, var(--ui-text)); }
+.ag-game .btn { min-height: 36px; }
+.ag-top { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.ag-score { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: .78rem; font-weight: 700; }
+.ag-score > span { padding: 5px 10px; border-radius: 9px; background: var(--c-fill, var(--ui-fill)); font-variant-numeric: tabular-nums; }
+.ag-status { min-height: 2.6em; font-size: .82rem; line-height: 1.4; color: var(--c-muted, var(--ui-muted)); }
+.ag-status.ag-blocked { color: var(--c-text, var(--ui-text)); }
+.ag-stage { position: relative; flex: 1 1 auto; min-height: 220px; container-type: size; display: grid; place-items: center; }
+.ag-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; flex: 0 0 auto; }
+.ag-game .btn:disabled { opacity: .42; }
+.ag-settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px 16px; }
+.ag-field { display: flex; flex-direction: column; align-items: stretch; gap: 6px; font-size: .8rem; font-weight: 600; min-width: 0; }
+.ag-field > input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); }
+.ag-field input[type=range] { accent-color: var(--accent); width: 100%; }
+.ag-field .hint { font-weight: 400; font-size: .72rem; }
+.ag-color { border: 1px solid var(--c-line, var(--ui-line)); border-radius: 8px; height: 36px; width: 100%; padding: 3px; background: var(--c-bg, var(--ui-bg)); cursor: pointer; }
+.ag-preview { pointer-events: none; }
+.ag-preview .ag-status { display: none; }
+
+/* 2048 */
+.ag-direction-pad { display: flex; flex-direction: column; gap: 5px; align-items: center; }
+.ag-direction-pad > div { display: flex; gap: 5px; }
+.ag-direction-pad button { min-width: 48px; font-size: 1.05rem; }
+.ag-2048-board { --n: 4; --gap: 8px; width: 100cqmin; height: 100cqmin; max-width: 520px; max-height: 520px; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); grid-template-rows: repeat(var(--n), minmax(0, 1fr)); gap: var(--gap); padding: var(--gap); border-radius: 14px; touch-action: none; user-select: none; container-type: inline-size; }
+.ag-2048-cell { min-width: 0; min-height: 0; border-radius: var(--ag-tile-radius, 9px); display: flex; align-items: center; justify-content: center; font-weight: 800; font-family: var(--font-display, system-ui, sans-serif); line-height: 1; font-size: calc(100cqw / var(--n) * .42 / max(1, (var(--digits) - 1) * .45 + .55)); box-shadow: inset 0 1px 0 rgba(255,255,255,.14); font-variant-numeric: tabular-nums; }
+
+/* Solitaire: seven columns always fit the panel width; the fan tightens as columns grow */
+.ag-sol-stage { display: block; overflow: auto; overscroll-behavior: contain; }
+.ag-sol-board { --gapc: clamp(3px, 1.4cqw, 9px); --card-w: calc((max(100cqw, 290px) - 16px - 6 * var(--gapc)) / 7); --card-h: calc(var(--card-w) * 1.4);
+  --step: clamp(calc(var(--card-h) * .15), calc((100cqh - var(--card-h) * 2 - 48px) / max(1, var(--rows, 1) - 1)), calc(var(--card-h) * .3));
+  --ag-table: #1c6558; --ag-card-back: #3454a1; --ag-card-face: #fffdf5; width: max(100cqw, 290px); min-height: 100%; padding: 8px 8px 14px; border-radius: 14px; background: var(--ag-table); box-shadow: inset 0 1px 16px rgba(0,0,0,.13); }
+.ag-sol-upper, .ag-sol-columns { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--gapc); }
+.ag-sol-upper { margin-bottom: calc(var(--card-h) * .18); }
+.ag-card { position: relative; width: 100%; height: var(--card-h); border-radius: max(4px, calc(var(--card-w) * .09)); border: 1px solid rgba(20,30,40,.23); font-family: var(--ag-card-font, Georgia, serif); box-shadow: 0 2px 3px rgba(0,0,0,.15); user-select: none; touch-action: manipulation; padding: 0; }
+.ag-card.ag-face { background: var(--ag-card-face); }
+.ag-card-corner { position: absolute; left: 7%; top: 4%; font-size: max(10px, calc(var(--card-w) * .25)); font-weight: 700; line-height: 1; letter-spacing: -.06em; white-space: nowrap; }
+.ag-card-suit { font-size: calc(var(--card-w) * .5); position: absolute; top: 56%; left: 50%; transform: translate(-50%, -50%); line-height: 1; }
+.ag-card-count { position: absolute; bottom: 2px; right: 3px; font: 600 max(8px, calc(var(--card-w) * .13))/1.3 var(--font-body, system-ui); border-radius: 3px; padding: 0 3px; background: rgba(0,0,0,.08); }
+.ag-card.ag-selected { outline: 3px solid #f2d555; outline-offset: 1px; z-index: 2; box-shadow: 0 0 13px rgba(255,224,100,.55); }
+.ag-card:focus-visible { outline: 3px solid #fff; outline-offset: 1px; box-shadow: 0 0 0 5px #1d3557; z-index: 3; }
+.ag-back { background: var(--ag-card-back); color: rgba(255,255,255,.8); border: max(2px, calc(var(--card-w) * .05)) solid var(--ag-card-face); display: flex; align-items: center; justify-content: center; font-size: calc(var(--card-w) * .36); cursor: default; }
+[data-pattern=diamonds] .ag-back { background-image: repeating-linear-gradient(45deg,transparent,transparent 7px,rgba(255,255,255,.12) 7px,rgba(255,255,255,.12) 8px), repeating-linear-gradient(-45deg,transparent,transparent 7px,rgba(255,255,255,.12) 7px,rgba(255,255,255,.12) 8px); }
+[data-pattern=stripes] .ag-back { background-image: repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(255,255,255,.15) 4px,rgba(255,255,255,.15) 6px); }
+.ag-stock { flex-direction: column; gap: 2px; cursor: pointer; }
+.ag-stock small { font: 700 max(9px, calc(var(--card-w) * .16)) var(--font-body, system-ui); }
+.ag-card.ag-sol-empty { display: flex; align-items: center; justify-content: center; border: 1.5px dashed rgba(255,255,255,.45); color: rgba(255,255,255,.75); background: rgba(0,0,0,.09); box-shadow: none; font-size: max(10px, calc(var(--card-w) * .22)); }
+.ag-card.ag-foundation-empty { font-size: calc(var(--card-w) * .42); }
+.ag-sol-column { position: relative; height: calc(var(--card-h) + var(--fan, 0) * var(--step)); min-height: var(--card-h); }
+.ag-sol-column > .ag-card { position: absolute; left: 0; top: calc(var(--y, 0) * var(--step)); }
+.ag-sol-column > .ag-card.ag-selected { z-index: auto; }
+
+/* Tetris: a 1:2 board that fits the panel height and width, with the next piece beside it */
+.ag-tetris-stage { overflow: hidden; }
+.ag-tetris-layout { --tw: min(calc((100cqh - 10px) / 2), calc(100cqw - 86px), 300px); display: flex; align-items: flex-start; justify-content: center; gap: 12px; }
+.ag-tetris-board { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); width: var(--tw); aspect-ratio: 1 / 2; padding: 3px; border: 1px solid rgba(128,150,180,.25); border-radius: 8px; overflow: hidden; touch-action: manipulation; }
+.ag-tetris-cell { min-width: 0; min-height: 0; border: 1px solid rgba(150,180,210,.08); border-radius: var(--ag-block-radius, 3px); }
+.ag-tetris-cell.ag-filled { box-shadow: inset 0 2px 0 rgba(255,255,255,.25), inset 0 -2px 0 rgba(0,0,0,.2); border: 1px solid rgba(0,0,0,.16); }
+.ag-tetris-cell.ag-ghost { border: 2px solid; opacity: .6; }
+.ag-tetris-board.ag-no-grid .ag-tetris-cell:not(.ag-filled):not(.ag-ghost) { border-color: transparent; }
+.ag-tetris-aside { width: 70px; display: flex; flex-direction: column; gap: 8px; }
+.ag-next-label { font-size: .66rem; letter-spacing: .12em; font-weight: 800; color: var(--c-muted, var(--ui-muted)); }
+.ag-tetris-next { display: grid; width: 60px; align-self: flex-start; }
+.ag-tetris-next i { aspect-ratio: 1; border-radius: 3px; border: 1px solid rgba(128,150,180,.1); }
+.ag-tetris-controls .btn { min-width: 44px; }
+.ag-2048-board:focus-visible, .ag-tetris-board:focus-visible { outline: 3px solid var(--c-accent, var(--accent)); outline-offset: 3px; }
+@media (max-width: 440px) { .ag-tetris-controls { gap: 5px; } .ag-tetris-controls .btn { padding: 6px 9px; } }

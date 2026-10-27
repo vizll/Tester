@@ -763,6 +763,10 @@ html[data-font="hand"] .wg-title-h { font-weight: 600; letter-spacing: 0; }
 .widget[data-w="xs"] .timer-main { min-width: 0; padding: 0 10px; }
 .widget[data-w="xs"] .timer-main span { display: none; }
 .timer-sessions { display: flex; align-items: center; gap: 8px; font-size: .74rem; color: var(--w-muted); }
+.timer-quick { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; border-top: 1px solid var(--w-line); padding-top: 8px; margin-top: 4px; }
+.timer-presets { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px; }
+.timer-duration { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.widget[data-type=timer] .w-body { overflow: auto; }
 .timer-dots { display: flex; gap: 4px; }
 .timer-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--w-fill-strong); }
 .timer-dots i.on { background: var(--w-accent); }
@@ -1184,7 +1188,8 @@ html[data-mode="dark"] .lib-size.on { background: var(--ui-fill-2); }
 
 /* ---------- Flashcards & tests ---------- */
 .dlg-study { height: min(90vh, 860px); }
-.dlg-study .dlg-body { display: flex; flex-direction: column; }
+.dlg-study .dlg-body { display: flex; flex-direction: column; gap: 12px; }
+.study-opts { display: flex; justify-content: center; }
 .flashcard { flex: 1 1 auto; min-height: 260px; perspective: 1400px; cursor: pointer; outline: none; border-radius: 26px; }
 .flashcard:focus-visible { box-shadow: 0 0 0 3px var(--accent); }
 .flashcard-inner { position: relative; width: 100%; height: 100%; min-height: inherit; transition: transform .55s cubic-bezier(.2,.75,.25,1); transform-style: preserve-3d; }
@@ -1277,13 +1282,15 @@ dialog .wl-desc { color: var(--ui-muted); }
 .welcome-tips svg { flex: 0 0 auto; color: var(--accent); margin-top: 1px; }
 .welcome-themes .theme-thumb { border-radius: 10px; }
 </style>
+<link rel="stylesheet" href="nav.css">
 <link rel="stylesheet" href="study-plus.css">
 <link rel="stylesheet" href="quiz-plus.css">
 <link rel="stylesheet" href="arcade-games.css">
 <link rel="stylesheet" href="chess.css">
+<link rel="stylesheet" href="gcal.css">
 </head>
 <body>
-  <a class="skip-link" href="#dash">Skip to dashboard</a>
+  <a class="skip-link" href="#dash">Skip to main content</a>
   <div id="bg" aria-hidden="true"></div>
   <div id="stickers" aria-hidden="true"></div>
   <div class="app">
@@ -1291,6 +1298,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     <main id="dash" class="dash" aria-label="Dashboard" tabindex="-1">
       <div class="boot-msg" role="status">Loading your Tester…</div>
     </main>
+    <main id="quizView" class="quiz-view" aria-label="Quiz" tabindex="-1" hidden></main>
   </div>
   <div id="editBar" class="edit-bar" role="toolbar" aria-label="Layout editing" hidden></div>
   <div id="toasts" class="toasts" aria-live="polite"></div>
@@ -2031,6 +2039,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     audio: { ambient: 'rain', volume: 45, visualizer: true },
     tracks: [],                 // names of local audio files (the files themselves can't be kept)
     ui: { folderId: '', noteId: '', quizId: '' },
+    sidebar: { width: 248, collapsed: false },
     lastBackupAt: null
   };
   let prefs = U.clone(DEFAULTS);
@@ -2065,6 +2074,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     }
     p.tracks = Array.isArray(raw.tracks) ? raw.tracks.filter(t => t && t.name).slice(0, 100).map(t => ({ id: U.str(t.id, 80) || U.uid('track'), name: U.str(t.name, 200), type: U.str(t.type, 60), size: U.num(t.size, 0) })) : [];
     if (U.isObj(raw.ui)) p.ui = { folderId: U.str(raw.ui.folderId, 80), noteId: U.str(raw.ui.noteId, 80), quizId: U.str(raw.ui.quizId, 80) };
+    if (U.isObj(raw.sidebar)) p.sidebar = { width: U.clampNum(Math.round(raw.sidebar.width), 200, 380, 248), collapsed: !!raw.sidebar.collapsed };
     p.lastBackupAt = Number(raw.lastBackupAt) || null;
     return p;
   }
@@ -2987,6 +2997,27 @@ dialog .wl-desc { color: var(--ui-muted); }
 
   const PRESETS = [
     {
+      id: 'study-play', name: 'Study & play', icon: '✦',
+      description: 'Your study sets, a focus timer and the week ahead. Quizzes and games live in the Quiz tab.',
+      appearance: {
+        mode: 'light', accent: '#346b76', accent2: '#7a65ad', surface: '#ffffff',
+        bg: { type: 'mesh', colors: ['#e1f2ed', '#cfdfed', '#e3dcf6', '#cbeae2'], angle: 135, animate: true, glow: false },
+        font: 'inter', scale: 100, radius: 24, gap: 20, density: 'spacious',
+        widget: { surface: 'liquid', opacity: 52, blur: 26, saturation: 170, shadow: 32, border: 45, padding: 'normal' },
+        stickers: { on: false, set: '🐚🌊🐠', count: 10, opacity: 60 }
+      },
+      layout: { mode: 'grid' },
+      widgets: [
+        w('title', 0, 0, 12, 2, { title: 'A little focus. A little play.', subtitle: 'Build a study set, quiz yourself in the Quiz tab, and earn your next move.', titleSize: 'l' }, bare),
+        w('flashcards', 0, 2, 8, 4, {}),
+        w('timer', 8, 2, 4, 7, { display: 'ring' }),
+        w('upcoming', 0, 6, 4, 5, { days: 14 }),
+        w('todo', 4, 6, 4, 5, {}),
+        w('calendar', 0, 11, 8, 6, { view: 'month' }),
+        w('assignments', 8, 9, 4, 8, { filter: 'upcoming' })
+      ]
+    },
+    {
       id: 'ocean', name: 'Ocean', icon: '🌊',
       description: 'Cool blues, liquid glass and lots of breathing room.',
       appearance: {
@@ -3309,8 +3340,13 @@ dialog .wl-desc { color: var(--ui-muted); }
     return out;
   }
 
+  /* Widget types from earlier versions: the "Quiz & game lab" became the Flashcards widget (the Quiz tab
+     now holds quizzes and games). Removed reward widgets (trophy cabinet, arcade game tiles) have no
+     definition, so they are dropped here — including from old backups. */
+  const RENAMED_TYPES = { 'quiz-plus': 'flashcards' };
   function sanitizeWidget(raw) {
     if (!U.isObj(raw)) return null;
+    if (RENAMED_TYPES[raw.type]) raw = { ...raw, type: RENAMED_TYPES[raw.type], config: {} };
     const def = SS.registry.get(raw.type);
     if (!def) return null;
     const pos = U.isObj(raw.pos) ? raw.pos : {};
@@ -3330,10 +3366,12 @@ dialog .wl-desc { color: var(--ui-muted); }
     };
   }
 
+  const sanitizeWidgets = list => { const ids = new Set(); return (Array.isArray(list) ? list : []).map(sanitizeWidget).filter(Boolean).filter(w => { if (ids.has(w.id)) w.id = U.uid('w'); ids.add(w.id); return true; }); };
+  const sanitizeLayout = l => ({ mode: l.mode === 'canvas' ? 'canvas' : 'grid', mdCustom: !!l.mdCustom, mobileOrder: Array.isArray(l.mobileOrder) ? l.mobileOrder.filter(x => typeof x === 'string') : null, canvasRef: U.clampNum(l.canvasRef, 320, 4000, 1280), allowOverlap: !!l.allowOverlap });
+
   function sanitizeWorkspace(raw, keepOrigin = true) {
     if (!U.isObj(raw)) return null;
-    const ids = new Set();
-    const widgets = (Array.isArray(raw.widgets) ? raw.widgets : []).map(sanitizeWidget).filter(Boolean).filter(w => { if (ids.has(w.id)) w.id = U.uid('w'); ids.add(w.id); return true; });
+    const widgets = sanitizeWidgets(raw.widgets);
     const l = U.isObj(raw.layout) ? raw.layout : {};
     const ws = {
       id: U.str(raw.id, 80) || U.uid('ws'),
@@ -3343,13 +3381,40 @@ dialog .wl-desc { color: var(--ui-muted); }
       createdAt: Number(raw.createdAt) || Date.now(),
       updatedAt: Number(raw.updatedAt) || Date.now(),
       appearance: sanitizeAppearance(raw.appearance),
-      layout: { mode: l.mode === 'canvas' ? 'canvas' : 'grid', mdCustom: !!l.mdCustom, mobileOrder: Array.isArray(l.mobileOrder) ? l.mobileOrder.filter(x => typeof x === 'string') : null, canvasRef: U.clampNum(l.canvasRef, 320, 4000, 1280), allowOverlap: !!l.allowOverlap },
+      layout: sanitizeLayout(l),
       widgets,
       origin: null
     };
     if (keepOrigin && U.isObj(raw.origin)) ws.origin = sanitizeWorkspace({ ...raw.origin, id: ws.id, name: ws.name }, false);
     SS.layout.normalize(ws);
     return ws;
+  }
+
+  /* Custom sidebar tabs ("pages"). Each owns its widgets and layout, like a theme's home dashboard,
+     while the active theme supplies the look. Content stays shared, so deleting a tab never deletes it. */
+  function sanitizePage(raw) {
+    if (!U.isObj(raw)) return null;
+    const page = {
+      id: /^pg_[\w-]{1,70}$/.test(String(raw.id)) ? raw.id : U.uid('pg'),
+      kind: 'page',
+      name: U.str(raw.name, 40).trim() || 'Untitled tab',
+      icon: U.str(raw.icon, 24) || 'note',
+      createdAt: Number(raw.createdAt) || Date.now(),
+      updatedAt: Number(raw.updatedAt) || Date.now(),
+      layout: sanitizeLayout(U.isObj(raw.layout) ? raw.layout : {}),
+      widgets: sanitizeWidgets(raw.widgets)
+    };
+    SS.layout.normalize(page);
+    return page;
+  }
+  const BUILT_IN = ['home', 'quiz'];
+  const MAX_PAGES = 30;
+  function sanitizeOrder(order, pages) {
+    const valid = new Set([...BUILT_IN, ...pages.map(p => p.id)]);
+    const out = [...new Set((Array.isArray(order) ? order : []).filter(id => valid.has(id)))];
+    BUILT_IN.forEach((id, i) => { if (!out.includes(id)) out.splice(Math.min(i, out.length), 0, id); });
+    pages.forEach(p => { if (!out.includes(p.id)) out.push(p.id); });
+    return out;
   }
 
   function fromPreset(preset, opts = {}) {
@@ -3369,20 +3434,84 @@ dialog .wl-desc { color: var(--ui-muted); }
   }
   const snapshot = ws => { const c = U.clone(ws); delete c.origin; return c; };
 
-  const state = { list: [], activeId: '' };
+  const state = { list: [], activeId: '', pages: [], order: [...BUILT_IN], view: 'home' };
   const W = SS.ws = {
-    DEFAULT_APPEARANCE, sanitizeAppearance, sanitizeWorkspace, sanitizeWidget, sanitizeStyle, fromPreset, snapshot, MAX_THEMES,
+    DEFAULT_APPEARANCE, sanitizeAppearance, sanitizeWorkspace, sanitizeWidget, sanitizeStyle, sanitizePage, sanitizeOrder, fromPreset, snapshot, MAX_THEMES, MAX_PAGES, BUILT_IN,
     state,
+    /* Accepts version 1 (themes only) and version 2 (themes + custom tabs + sidebar order + open view). */
     load(raw) {
       state.list = (U.isObj(raw) && Array.isArray(raw.list) ? raw.list : []).map(x => sanitizeWorkspace(x)).filter(Boolean);
       const seen = new Set(); state.list = state.list.filter(w => { if (seen.has(w.id)) return false; seen.add(w.id); return true; });
       state.activeId = U.isObj(raw) ? U.str(raw.activeId, 80) : '';
+      const pseen = new Set();
+      state.pages = (U.isObj(raw) && Array.isArray(raw.pages) ? raw.pages : []).map(sanitizePage).filter(p => p && !pseen.has(p.id) && pseen.add(p.id)).slice(0, MAX_PAGES);
+      state.order = sanitizeOrder(U.isObj(raw) ? raw.order : null, state.pages);
+      const view = U.isObj(raw) ? U.str(raw.view, 80) : '';
+      state.view = state.order.includes(view) ? view : 'home';
     },
-    serialize: () => ({ version: 1, list: state.list, activeId: state.activeId }),
+    serialize: () => ({ version: 2, list: state.list, activeId: state.activeId, pages: state.pages, order: state.order, view: state.view }),
     save() { SS.store.save('workspaces', W.serialize); },
     all: () => state.list,
     get: id => state.list.find(w => w.id === id) || null,
     active: () => W.get(state.activeId) || state.list[0],
+    /* ---- Sidebar destinations: Home (the active theme's dashboard), Quiz, and custom tabs ---- */
+    pages: () => state.pages,
+    page: id => state.pages.find(p => p.id === id) || null,
+    isPage: x => !!x && x.kind === 'page',
+    view: () => state.view,
+    /* What the dashboard shows: a custom tab's own layout, or the active theme's home layout */
+    surface: () => W.page(state.view) || W.active(),
+    navItems: () => state.order.map(id => (id === 'home' ? { id, kind: 'home', name: 'Home', icon: 'home' } : id === 'quiz' ? { id, kind: 'quiz', name: 'Quiz', icon: 'cards' } : { ...W.page(id), kind: 'page' })).filter(x => x.id),
+    setView(id, opts = {}) {
+      if (!state.order.includes(id)) id = 'home';
+      const prev = state.view;
+      state.view = id; W.save();
+      if (prev !== id || opts.force) SS.bus.emit('view', { view: id, prev, ...opts });
+    },
+    /* Show the dashboard that owns a widget record (used by undo) */
+    showSurface(target) {
+      if (W.isPage(target)) { if (state.view !== target.id) W.setView(target.id); return; }
+      if (state.view !== 'home') W.setView('home');
+      if (target && state.activeId !== target.id) W.switchTo(target.id);
+    },
+    createPage(opts = {}) {
+      if (state.pages.length >= MAX_PAGES) { SS.ui.toast(`You can keep up to ${MAX_PAGES} tabs. Delete one to make another.`, { kind: 'error' }); return null; }
+      const page = sanitizePage({ id: U.uid('pg'), name: opts.name || 'New tab', icon: opts.icon || 'note', widgets: [], layout: { mode: 'grid' } });
+      state.pages.push(page);
+      const at = opts.after ? state.order.indexOf(opts.after) + 1 : state.order.length;
+      state.order.splice(at > 0 ? at : state.order.length, 0, page.id);
+      W.save();
+      SS.bus.emit('nav');
+      return page;
+    },
+    renamePage(id, name) { const p = W.page(id); if (!p || !String(name || '').trim()) return; p.name = String(name).trim().slice(0, 40); p.updatedAt = Date.now(); W.save(); SS.bus.emit('nav'); },
+    setPageIcon(id, icon) { const p = W.page(id); if (!p || !icon) return; p.icon = String(icon).slice(0, 24); p.updatedAt = Date.now(); W.save(); SS.bus.emit('nav'); },
+    moveNav(id, dir) {
+      const i = state.order.indexOf(id); const j = i + dir;
+      if (i < 0 || j < 0 || j >= state.order.length) return false;
+      [state.order[i], state.order[j]] = [state.order[j], state.order[i]];
+      W.save(); SS.bus.emit('nav');
+      return true;
+    },
+    setOrder(ids) { state.order = sanitizeOrder(ids, state.pages); W.save(); SS.bus.emit('nav'); },
+    /* Deleting a tab removes only its layout; notes, sets and other content are shared and stay. */
+    removePage(id) {
+      const i = state.pages.findIndex(p => p.id === id); if (i < 0) return false;
+      const [removed] = state.pages.splice(i, 1);
+      const orderBefore = [...state.order];
+      state.order = state.order.filter(x => x !== id);
+      const wasOpen = state.view === id;
+      W.save(); SS.bus.emit('nav');
+      if (wasOpen) { const k = orderBefore.indexOf(id); W.setView(orderBefore[k - 1] || orderBefore[k + 1] || 'home'); }
+      SS.undo.push(`Tab “${removed.name}” deleted`, () => {
+        if (W.page(removed.id)) return;
+        state.pages.splice(Math.min(i, state.pages.length), 0, removed);
+        state.order = sanitizeOrder(orderBefore, state.pages);
+        W.save(); SS.bus.emit('nav');
+        if (wasOpen) W.setView(removed.id);
+      });
+      return true;
+    },
     initialId() {
       const d = SS.prefs.get('defaultWs');
       if (d && d !== 'last' && W.get(d)) return d;
@@ -3393,8 +3522,8 @@ dialog .wl-desc { color: var(--ui-muted); }
       if (activePreset) { const ws = state.list.find(w => w.presetId === activePreset); if (ws) state.activeId = ws.id; }
       W.save();
     },
-    /* Mark the active workspace changed and persist */
-    touch(ws = W.active(), opts = {}) {
+    /* Mark a theme or tab changed and persist (defaults to whatever the dashboard is showing) */
+    touch(ws = W.surface(), opts = {}) {
       ws.updatedAt = Date.now();
       W.save();
       SS.bus.emit('ws:change', { ws, ...opts });
@@ -3453,7 +3582,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     /* Restore any missing built-in theme (they can be deleted, but never lost for good) */
     restorePreset(presetId) { const p = SS.presets.get(presetId); if (!p) return null; const ws = fromPreset(p); state.list.push(ws); W.save(); SS.bus.emit('ws:list'); return ws; },
     applyTemplate(templateId) {
-      const t = SS.presets.template(templateId); const ws = W.active(); if (!t || !ws) return;
+      const t = SS.presets.template(templateId); const ws = W.surface(); if (!t || !ws) return;
       const before = U.clone({ widgets: ws.widgets, layout: ws.layout });
       ws.widgets = SS.presets.buildWidgets(t.widgets);
       ws.layout = { ...ws.layout, mode: 'grid', mdCustom: false, mobileOrder: null };
@@ -3462,9 +3591,9 @@ dialog .wl-desc { color: var(--ui-muted); }
       SS.bus.emit('ws:switch', { ws, prev: ws.id, template: true });
       SS.undo.push(`“${t.name}” layout applied`, () => { ws.widgets = before.widgets; ws.layout = before.layout; W.touch(ws, { full: true }); SS.bus.emit('ws:switch', { ws, prev: ws.id, template: true }); });
     },
-    /* Copy or move a widget to another theme (content is shared, so only the widget settings travel) */
+    /* Copy or move a widget to another theme or tab (content is shared, so only the widget settings travel) */
     sendWidget(widgetId, targetId, move) {
-      const src = W.active(); const target = W.get(targetId); const wdg = src.widgets.find(x => x.id === widgetId);
+      const src = W.surface(); const target = W.get(targetId) || W.page(targetId); const wdg = src.widgets.find(x => x.id === widgetId);
       if (!wdg || !target) return;
       const copy = U.clone(wdg); copy.id = U.uid('w'); copy.locked = false; copy.pos.md = null;
       const at = SS.layout.firstFit(target.widgets.map(x => ({ id: x.id, ...x.pos.lg })), copy.pos.lg.w, copy.pos.lg.h, 12);
@@ -3473,7 +3602,7 @@ dialog .wl-desc { color: var(--ui-muted); }
       target.widgets.push(copy); target.updatedAt = Date.now();
       if (move) { src.widgets = src.widgets.filter(x => x.id !== widgetId); W.touch(src, { full: true }); SS.bus.emit('ws:switch', { ws: src, prev: src.id }); }
       W.save(); SS.bus.emit('ws:list');
-      SS.ui.toast(`${move ? 'Moved' : 'Copied'} to “${target.name}”`, { kind: 'success', action: { label: 'Go there', fn: () => W.switchTo(target.id) } });
+      SS.ui.toast(`${move ? 'Moved' : 'Copied'} to “${target.name}”`, { kind: 'success', action: { label: 'Go there', fn: () => W.showSurface(target) } });
     }
   };
 })(window.SS);
@@ -3498,11 +3627,14 @@ dialog .wl-desc { color: var(--ui-muted); }
   let drag = null;
   let lastWidth = 0;
 
-  const ws = () => SS.ws.active();
+  // ws(): what owns the widgets and layout on screen (a theme's home dashboard or a custom tab);
+  // look(): the active theme, which owns appearance, spacing and row height.
+  const ws = () => SS.ws.surface();
+  const look = () => SS.ws.active();
   const findW = id => ws().widgets.find(w => w.id === id) || null;
   const titleOf = w => { const def = SS.registry.get(w.type); return w.title || (def.title ? def.title(w.config) : '') || def.name; };
-  const rowH = () => L.ROW[ws().appearance.density] || 60;
-  const gapPx = () => U.clampNum(ws().appearance.gap, 6, 36, 16);
+  const rowH = () => L.ROW[look().appearance.density] || 60;
+  const gapPx = () => U.clampNum(look().appearance.gap, 6, 36, 16);
   const isCanvas = () => ws().layout.mode === 'canvas' && D.bp !== 'sm';
 
   /* ---------------- Mounting ---------------- */
@@ -3516,13 +3648,22 @@ dialog .wl-desc { color: var(--ui-muted); }
     root.addEventListener('contextmenu', onContextMenu);
     root.addEventListener('pointerdown', onPointerDown);
     root.addEventListener('keydown', onKeyDown);
-    SS.bus.on('ws:switch', ({ ws: w, instant }) => { SS.theme.apply(w, { instant }); D.render({ animate: !instant }); });
+    SS.bus.on('ws:switch', ({ instant }) => { SS.theme.apply(look(), { instant }); if (D.active) D.render({ animate: !instant }); });
     SS.bus.on('theme-applied', () => D.restyleAll());
-    SS.bus.on('prefs', ({ key }) => { if (key === 'performance' || key === 'motion') { SS.theme.applyGlobalPrefs(); SS.theme.apply(ws(), { instant: true }); } });
+    SS.bus.on('prefs', ({ key }) => { if (key === 'performance' || key === 'motion') { SS.theme.applyGlobalPrefs(); SS.theme.apply(look(), { instant: true }); } });
     addEventListener('keydown', e => { if (drag && e.key === 'Escape') cancelDrag(); });
   };
 
+  /* The dashboard is unmounted while another view (the Quiz tab) is open, so hidden widgets don't keep working. */
+  D.active = true;
+  D.setActive = on => {
+    D.active = !!on;
+    D.root.hidden = !D.active;
+    if (!D.active) { if (D.editing) D.setEditing(false); D.instances.forEach(inst => unmount(inst)); D.instances.clear(); D.inner.replaceChildren(); D.root.querySelector('.dash-empty')?.remove(); }
+  };
+
   D.render = (opts = {}) => {
+    if (!D.active) return;
     const run = () => {
       D.instances.forEach(inst => unmount(inst));
       D.instances.clear();
@@ -3543,10 +3684,11 @@ dialog .wl-desc { color: var(--ui-muted); }
   function renderEmpty() {
     D.root.querySelector('.dash-empty')?.remove();
     if (ws().widgets.length) return;
+    const page = SS.ws.isPage(ws());
     const box = el('div.dash-empty',
       el('div.dash-empty-art', SS.icon('layout', 30)),
-      el('h2', { text: 'This theme is a blank canvas' }),
-      el('p', { text: 'Add widgets one at a time, or start from a ready-made layout for homework, exams or a long study session.' }),
+      el('h2', { text: page ? `“${ws().name}” is empty` : 'This theme is a blank canvas' }),
+      el('p', { text: page ? 'This tab has its own widgets and layout. Add a widget to start — your notes, sets and assignments are shared with every tab, so nothing is duplicated.' : 'Add widgets one at a time, or start from a ready-made layout for homework, exams or a long study session.' }),
       el('div.row-gap',
         el('button.btn.btn-primary', { type: 'button', on: { click: () => SS.panels.library() } }, SS.icon('plus', 16), 'Add a widget'),
         el('button.btn', { type: 'button', on: { click: () => SS.panels.templates() } }, SS.icon('layout', 16), 'Use a layout template')));
@@ -3659,7 +3801,7 @@ dialog .wl-desc { color: var(--ui-muted); }
   /* Frame classes + CSS variables from the widget's appearance */
   function applyFrame(inst) {
     const w = findW(inst.id); if (!w) return;
-    const s = SS.theme.widgetStyle(ws(), w, inst.def);
+    const s = SS.theme.widgetStyle(look(), w, inst.def);
     const frame = inst.el;
     const keep = ['no-trans', 'just-added', 'editing-target', 'dragging', 'resizing', 'half'].filter(c => frame.classList.contains(c));
     frame.className = ['widget', ...s.classes, s.showHeader ? '' : 'no-head', w.locked ? 'locked' : '', inst.def.className || '', ...keep].filter(Boolean).join(' ');
@@ -4041,7 +4183,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     const canvas = isCanvas(); const stack = D.bp === 'sm';
     const cur = canvas ? 'custom' : SS.registry.sizeName(wd.type, wd.pos.lg.w, wd.pos.lg.h);
     const hasStyle = Object.keys(wd.style || {}).length > 0;
-    const others = SS.ws.all().filter(x => x.id !== w.id);
+    const others = [...SS.ws.all(), ...SS.ws.pages()].filter(x => x.id !== w.id);
     const items = [
       { heading: titleOf(wd) },
       { label: 'Edit widget…', icon: 'sliders', onClick: () => SS.panels.widgetSettings(id) },
@@ -4054,7 +4196,7 @@ dialog .wl-desc { color: var(--ui-muted); }
       { label: 'Duplicate', icon: 'copy', kbd: '', onClick: () => D.duplicate(id) },
       stack ? { label: 'Move up', icon: 'arrowUp', onClick: () => D.stackMove(id, -1) } : canvas ? { label: 'Bring to front', icon: 'front', onClick: () => D.zOrder(id, 1) } : { label: 'Move to top', icon: 'arrowUp', disabled: wd.locked, onClick: () => D.moveToEdge(id, 'top') },
       stack ? { label: 'Move down', icon: 'arrowDown', onClick: () => D.stackMove(id, 1) } : canvas ? { label: 'Send to back', icon: 'back', onClick: () => D.zOrder(id, -1) } : { label: 'Move to bottom', icon: 'arrowDown', disabled: wd.locked, onClick: () => D.moveToEdge(id, 'bottom') },
-      others.length && { label: 'Copy or move to another theme…', icon: 'layers', onClick: () => sendDialog(id) },
+      others.length && { label: 'Copy or move to another tab or theme…', icon: 'layers', onClick: () => sendDialog(id) },
       { label: wd.locked ? 'Unlock position' : 'Lock position', icon: wd.locked ? 'unlock' : 'lock', onClick: () => D.toggleLock(id) },
       { label: 'Reset styling', icon: 'refresh', disabled: !hasStyle, onClick: () => D.resetStyle(id) },
       '-',
@@ -4065,12 +4207,14 @@ dialog .wl-desc { color: var(--ui-muted); }
 
   function sendDialog(id) {
     const wd = findW(id);
-    const dlg = SS.ui.dialog({ title: `Send “${titleOf(wd)}” to another theme`, subtitle: 'Your content stays the same — only the widget and its look are copied.', size: 'sm' });
+    const dlg = SS.ui.dialog({ title: `Send “${titleOf(wd)}” to another tab or theme`, subtitle: 'Your content stays the same — only the widget and its look are copied.', size: 'sm' });
     let mode = 'copy';
     dlg.body.append(SS.ui.segmented({ label: 'Copy or move', value: 'copy', options: [{ value: 'copy', label: 'Copy', icon: 'copy' }, { value: 'move', label: 'Move', icon: 'move' }], onChange: v => { mode = v; } }));
-    const list = el('div.pick-list');
-    SS.ws.all().filter(x => x.id !== ws().id).forEach(t => list.append(el('button.pick-item', { type: 'button', on: { click: () => { dlg.close(); SS.ws.sendWidget(id, t.id, mode === 'move'); } } }, el('span.pick-icon', { text: t.icon || '◆' }), el('span', { text: t.name }), SS.icon('chevR', 16))));
-    dlg.body.append(list);
+    const pick = t => el('button.pick-item', { type: 'button', on: { click: () => { dlg.close(); SS.ws.sendWidget(id, t.id, mode === 'move'); } } }, el('span.pick-icon', SS.ws.isPage(t) && SS.icon.names.includes(t.icon) ? SS.icon(t.icon, 16) : document.createTextNode(t.icon || '◆')), el('span', { text: SS.ws.isPage(t) ? t.name : `${t.name} · home` }), SS.icon('chevR', 16));
+    const pages = SS.ws.pages().filter(x => x.id !== ws().id);
+    const themes = SS.ws.all().filter(x => x.id !== ws().id);
+    if (pages.length) dlg.body.append(el('h3.panel-h', { text: 'Your tabs' }), el('div.pick-list', pages.map(pick)));
+    if (themes.length) dlg.body.append(el('h3.panel-h', { text: 'Theme home dashboards' }), el('div.pick-list', themes.map(pick)));
     dlg.foot.append(el('button.btn', { type: 'button', text: 'Cancel', on: { click: () => dlg.close() } }));
   }
 
@@ -4207,7 +4351,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     renderEmpty();
     const def = SS.registry.get(removed.type);
     SS.undo.push(`${titleOf(removed)} removed${def.keepsContent ? ' — your content is still saved' : ''}`, () => {
-      const ws2 = ws(); if (ws2 !== w) { SS.ws.switchTo(w.id); }
+      if (ws() !== w) SS.ws.showSurface(w);
       before.forEach(b => { const x = w.widgets.find(y => y.id === b.id); if (x) x.pos = b.pos; });
       w.widgets.splice(Math.min(idx, w.widgets.length), 0, removed);
       w.layout.mobileOrder = order;
@@ -4873,13 +5017,13 @@ dialog .wl-desc { color: var(--ui-muted); }
 })(window.SS);
 </script>
   <script>/* js/legacy/flashcards.js */
-/* Tester — flashcards, study sets library and practice tests, ported from the original page
-   (same grading rules: small typos forgiven, short answers and numbers must match exactly). */
+/* Tester — answer grading and flip-through flashcards, ported from the original page (same grading
+   rules: small typos forgiven, short answers and numbers must match exactly). The study-set editor,
+   library and quizzes are in the Quiz tab (quiz-plus.js). */
 (function (SS) {
   'use strict';
   const U = SS.util;
   const { el } = U;
-  const quizzes = () => SS.data.all('quizzes');
   const usable = cards => (cards || []).map(c => ({ term: String(c?.term ?? '').trim(), def: String(c?.def ?? '').trim() })).filter(c => c.term && c.def);
 
   /* ---------- answer grading (unchanged from the original) ---------- */
@@ -4910,35 +5054,40 @@ dialog .wl-desc { color: var(--ui-muted); }
 
   const C = SS.cards = { grade: gradeWritten };
 
-  /* ---------- Study (flip cards) ---------- */
+  /* ---------- Study (flip cards) — flipping never unlocks game moves; only checked quiz answers do ---------- */
   C.study = quizId => {
     const quiz = SS.data.get('quizzes', quizId);
-    if (!quiz || !quiz.cards.length) { SS.ui.toast('This study set has no cards yet.'); return; }
+    const cards = usable(quiz?.cards);
+    if (!quiz || !cards.length) { SS.ui.toast('Add cards with both a term and a definition to study this set.'); return; }
     SS.prefs.patch('ui', { quizId });
-    let order = quiz.cards.map((_, i) => i), i = 0, flipped = false, known = new Set();
+    let order = cards.map((_, i) => i), i = 0, flipped = false, front = 'term';
+    const known = new Set();
     const dlg = SS.ui.dialog({ eyebrow: 'Flashcards', title: quiz.title, size: 'xl', class: 'dlg-study', footer: true,
-      headExtra: el('button.btn.btn-sm', { type: 'button', on: { click: () => { dlg.close(); C.test(quizId); } } }, SS.icon('checklist', 14), 'Practice test') });
-    const progress = el('p.dlg-sub.study-progress');
+      headExtra: el('button.btn.btn-sm', { type: 'button', on: { click: () => { dlg.close(); SS.quiz.practice(quizId); } } }, SS.icon('checklist', 14), 'Quiz & play') });
+    const progress = el('p.dlg-sub.study-progress', { attrs: { 'aria-live': 'polite' } });
     dlg.head.querySelector('.dlg-titles').append(progress);
-    const front = el('div.card-text'), back = el('div.card-text');
-    const card = el('div.flashcard', { role: 'button', tabIndex: 0, aria: { label: 'Flashcard. Press Space or Enter to flip.' } },
-      el('div.flashcard-inner', el('div.flashcard-face', el('span.card-label', { text: 'Term' }), front), el('div.flashcard-face.flashcard-back', el('span.card-label', { text: 'Definition' }), back)));
-    const flip = () => { flipped = !flipped; card.classList.toggle('flipped', flipped); };
+    const frontText = el('div.card-text'), backText = el('div.card-text');
+    const frontLabel = el('span.card-label'), backLabel = el('span.card-label');
+    const card = el('div.flashcard', { role: 'button', tabIndex: 0, aria: { label: 'Flashcard. Press Space or Enter to flip, arrow keys for the next or previous card.' } },
+      el('div.flashcard-inner', el('div.flashcard-face', frontLabel, frontText), el('div.flashcard-face.flashcard-back', backLabel, backText)));
+    const flip = () => { flipped = !flipped; card.classList.toggle('flipped', flipped); card.setAttribute('aria-pressed', String(flipped)); };
     card.addEventListener('click', flip);
-    card.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); } else if (e.key === 'ArrowRight') go(1); else if (e.key === 'ArrowLeft') go(-1); });
+    card.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); } else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); } });
     const prev = el('button.btn', { type: 'button', on: { click: () => go(-1) } }, SS.icon('chevL', 16), 'Previous');
     const next = el('button.btn', { type: 'button', on: { click: () => go(1) } }, 'Next', SS.icon('chevR', 16));
-    const knowBtn = el('button.btn', { type: 'button', on: { click: () => { const idx = order[i]; known.has(idx) ? known.delete(idx) : known.add(idx); show(); } } });
+    const knowBtn = el('button.btn', { type: 'button', on: { click: () => { const idx = order[i]; if (known.has(idx)) known.delete(idx); else known.add(idx); show(); } } });
     const shuf = el('button.btn.btn-ghost', { type: 'button', title: 'Shuffle cards', on: { click: () => { order = shuffle(order); i = 0; show(); SS.ui.toast('Shuffled', { timeout: 1500 }); } } }, SS.icon('repeat', 15), 'Shuffle');
     const flipBtn = el('button.btn.btn-primary', { type: 'button', on: { click: flip } }, SS.icon('refresh', 15), 'Flip');
-    dlg.body.append(card);
+    const side = SS.ui.segmented({ label: 'Show first', value: front, size: 'sm', options: [{ value: 'term', label: 'Term first' }, { value: 'def', label: 'Definition first' }], onChange: v => { front = v; show(); } });
+    dlg.body.append(el('div.study-opts', side), card);
     dlg.foot.classList.add('study-actions');
     dlg.foot.append(prev, shuf, flipBtn, knowBtn, next);
     function show() {
-      const c = quiz.cards[order[i]];
-      flipped = false; card.classList.remove('flipped');
-      front.textContent = c.term || 'Term'; back.textContent = c.def || 'Definition';
-      progress.textContent = `Card ${i + 1} of ${quiz.cards.length} · ${known.size} known · tap the card to flip`;
+      const c = cards[order[i]];
+      flipped = false; card.classList.remove('flipped'); card.setAttribute('aria-pressed', 'false');
+      frontLabel.textContent = front === 'term' ? 'Term' : 'Definition'; backLabel.textContent = front === 'term' ? 'Definition' : 'Term';
+      frontText.textContent = front === 'term' ? c.term : c.def; backText.textContent = front === 'term' ? c.def : c.term;
+      progress.textContent = `Card ${i + 1} of ${cards.length} · ${known.size} known`;
       prev.disabled = i === 0; next.disabled = i >= order.length - 1;
       knowBtn.replaceChildren(SS.icon(known.has(order[i]) ? 'check' : 'star', 15), known.has(order[i]) ? 'Known' : 'Mark known');
       knowBtn.classList.toggle('btn-on', known.has(order[i]));
@@ -4948,172 +5097,11 @@ dialog .wl-desc { color: var(--ui-muted); }
     requestAnimationFrame(() => card.focus());
   };
 
-  /* ---------- Create / edit a set ---------- */
-  C.edit = (quizId, opts = {}) => {
-    const quiz = quizId ? SS.data.get('quizzes', quizId) : null;
-    let mode = opts.importText ? 'import' : 'manual';
-    const dlg = SS.ui.dialog({ eyebrow: quiz ? 'Edit study set' : 'New study set', title: quiz ? quiz.title : 'Create flashcards', size: 'md' });
-    const title = SS.ui.input({ value: quiz ? quiz.title : (opts.title || ''), placeholder: 'e.g. Biology chapter 3', label: 'Study set title', maxLength: 200 });
-    let subjectId = quiz ? quiz.subjectId : (opts.subjectId || '');
-    const subj = SS.ui.subjectSelect(subjectId, v => { subjectId = v; });
-    const rows = el('div.card-rows');
-    const addRow = (term = '', def = '') => {
-      const t = el('textarea.input.term-input', { rows: 1, placeholder: 'Term', aria: { label: 'Term' } }); t.value = term;
-      const d = el('textarea.input.def-input', { rows: 1, placeholder: 'Definition', aria: { label: 'Definition' } }); d.value = def;
-      const row = el('div.card-row', el('span.card-row-n'), t, d, el('button.icon-btn.sm', { type: 'button', aria: { label: 'Remove card' }, on: { click: () => { row.remove(); number(); } } }, SS.icon('x', 14)));
-      [t, d].forEach(x => x.addEventListener('keydown', e => { if (e.key === 'Tab' && !e.shiftKey && x === d && row === rows.lastElementChild) { addRow(); number(); } }));
-      rows.append(row); number(); return row;
-    };
-    const number = () => [...rows.children].forEach((r, i) => { r.querySelector('.card-row-n').textContent = i + 1; });
-    (quiz ? quiz.cards : [{}, {}, {}]).forEach(c => addRow(c.term || '', c.def || ''));
-    const manual = el('div.card-manual', rows, el('button.btn.btn-sm', { type: 'button', on: { click: () => { const r = addRow(); r.querySelector('textarea').focus(); } } }, SS.icon('plus', 14), 'Add card'));
-    const importArea = el('textarea.input.import-area', { rows: 8, placeholder: 'One card per line, e.g.\nCell - Basic unit of life\nMitochondria - Produces cellular energy', aria: { label: 'Cards to import' } });
-    importArea.value = opts.importText || '';
-    const sep = SS.ui.input({ value: '', placeholder: 'Detected automatically', label: 'Separator', maxLength: 8 });
-    const detected = el('p.hint');
-    const detect = () => { const lines = importArea.value.split('\n').filter(l => l.trim()); const s = detectSeparator(lines); detected.textContent = lines.length ? (s ? `Separator found: “${s === '\t' ? 'Tab' : s}” · ${lines.length} lines` : 'No separator found — type one above (e.g. - or :)') : ''; return s; };
-    importArea.addEventListener('input', detect);
-    const importBox = el('div.card-import', importArea, el('div.row-gap', SS.ui.field('Term / definition separator', sep)), detected);
-    const seg = SS.ui.segmented({ label: 'How to add cards', value: mode, options: [{ value: 'manual', label: 'Type cards', icon: 'edit' }, { value: 'import', label: 'Paste text', icon: 'copy' }], onChange: v => { mode = v; manual.hidden = v !== 'manual'; importBox.hidden = v !== 'import'; if (v === 'import') detect(); } });
-    manual.hidden = mode !== 'manual'; importBox.hidden = mode !== 'import'; if (mode === 'import') detect();
-    dlg.body.append(SS.ui.field('Title', title), SS.ui.field('Subject', subj),
-      el('div.row-gap', seg, el('button.btn.btn-sm.btn-ghost', { type: 'button', on: { click: () => SS.ocr.open({ onStudySet: text => { seg.setValue('import'); mode = 'import'; manual.hidden = true; importBox.hidden = false; importArea.value = (importArea.value.trim() ? importArea.value.trim() + '\n' : '') + text; detect(); } }) } }, SS.icon('camera', 14), 'Scan a photo')),
-      manual, importBox);
-    const save = () => {
-      let cards = [];
-      if (mode === 'manual') rows.querySelectorAll('.card-row').forEach(r => { const t = r.querySelector('.term-input').value.trim(), d = r.querySelector('.def-input').value.trim(); if (t || d) cards.push({ term: t || 'Term', def: d || 'Definition' }); });
-      else {
-        const s = sep.value ? (sep.value === '\\t' ? '\t' : sep.value) : (detect() || ' - ');
-        importArea.value.split('\n').forEach(line => { if (!line.trim()) return; const [t = 'Term', ...rest] = line.split(s); cards.push({ term: t.trim() || 'Term', def: rest.join(s).trim() || 'Definition' }); });
-      }
-      if (!cards.length) { SS.ui.toast('Add at least one card first.', { kind: 'error' }); return; }
-      const t = title.value.trim() || 'Untitled study set';
-      if (quiz) SS.data.update('quizzes', quiz.id, { title: t, cards, subjectId });
-      else { const q = SS.data.add('quizzes', { title: t, cards, subjectId }); SS.prefs.patch('ui', { quizId: q.id }); }
-      dlg.close();
-      SS.ui.toast(quiz ? 'Study set saved' : `Study set created with ${U.plural(cards.length, 'card')}`, { kind: 'success' });
-    };
-    U.put(dlg.foot, 
-      quiz ? el('button.btn.btn-danger.mr-auto', { type: 'button', on: { click: async () => { if (await C.remove(quiz.id)) dlg.close(); } } }, SS.icon('trash', 15), 'Delete set') : null,
-      el('button.btn', { type: 'button', text: 'Cancel', on: { click: () => dlg.close() } }),
-      el('button.btn.btn-primary', { type: 'button', text: quiz ? 'Save changes' : 'Save study set', on: { click: save } }));
-    requestAnimationFrame(() => title.focus());
-  };
-  function detectSeparator(lines) {
-    const options = [['\t', l => l.includes('\t')], [' - ', l => l.includes(' - ')], [' – ', l => l.includes(' – ')], [' — ', l => l.includes(' — ')], [' → ', l => l.includes(' → ')], [': ', l => l.includes(': ')], [' = ', l => l.includes(' = ')]];
-    let best = null, bestN = 0; options.forEach(([v, test]) => { const n = lines.filter(test).length; if (n > bestN) { best = v; bestN = n; } }); return best;
-  }
-  C.remove = async quizId => {
-    const quiz = SS.data.get('quizzes', quizId); if (!quiz) return false;
-    if (!(await SS.ui.confirm({ title: 'Delete study set?', message: `“${quiz.title}” and its ${U.plural(quiz.cards.length, 'card')} will be removed. You can undo right after.`, ok: 'Delete set' }))) return false;
-    SS.data.remove('quizzes', quizId, { label: `Study set “${quiz.title}” deleted` });
-    return true;
-  };
-
-  /* ---------- Library ---------- */
-  C.library = () => {
-    const dlg = SS.ui.dialog({ eyebrow: 'Recall library', title: 'Study sets', subtitle: 'Build flashcards by typing, pasting or scanning a photo.', size: 'lg',
-      headExtra: el('button.btn.btn-primary.btn-sm', { type: 'button', on: { click: () => C.edit() } }, SS.icon('plus', 14), 'New set') });
-    const grid = el('div.quiz-grid');
-    const draw = () => {
-      grid.replaceChildren();
-      if (!quizzes().length) { grid.append(SS.ui.empty('cards', 'No study sets yet', 'Create one to start reviewing.', el('button.btn.btn-primary.btn-sm', { type: 'button', on: { click: () => C.edit() } }, SS.icon('plus', 14), 'Create a set'))); return; }
-      quizzes().forEach((q, i) => {
-        const subj = SS.data.subject(q.subjectId);
-        grid.append(el('article.quiz-card', { style: { '--k': subj ? subj.color : U.SUBJECT_COLORS[i % U.SUBJECT_COLORS.length] } },
-          el('div', el('div.quiz-card-title', { text: q.title }), el('div.quiz-card-meta', { text: `${U.plural(q.cards.length, 'card')}${subj ? ' · ' + subj.name : ''}` })),
-          el('div.quiz-card-actions',
-            el('button.btn.btn-primary.btn-sm', { type: 'button', on: { click: () => C.study(q.id) } }, 'Study'),
-            el('button.btn.btn-sm', { type: 'button', on: { click: () => C.test(q.id) } }, 'Test'),
-            el('button.icon-btn.sm', { type: 'button', aria: { label: `Edit ${q.title}` }, title: 'Edit', on: { click: () => C.edit(q.id) } }, SS.icon('edit', 15)),
-            el('button.icon-btn.sm', { type: 'button', aria: { label: `Delete ${q.title}` }, title: 'Delete', on: { click: () => C.remove(q.id) } }, SS.icon('trash', 15)))));
-      });
-    };
-    draw();
-    const off = SS.bus.on('data:quizzes', draw);
-    dlg.body.append(grid);
-    dlg.foot.remove();
-    const origClose = dlg.close; dlg.close = r => { off(); origClose(r); };
-  };
-
-  /* ---------- Practice test ---------- */
-  C.test = (quizId, pool) => {
-    const quiz = SS.data.get('quizzes', quizId);
-    const cards = usable(quiz?.cards);
-    if (!cards.length) { SS.ui.toast('Add cards with both a term and a definition to take a test.'); return; }
-    const dlg = SS.ui.dialog({ eyebrow: 'Practice test', title: quiz.title, subtitle: `${U.plural(cards.length, 'card')}`, size: 'md', class: 'dlg-test' });
-    const T = { type: 'tf', dir: 'def', questions: [], answers: [], i: 0, warned: false };
-    const setup = () => {
-      dlg.body.replaceChildren(); dlg.foot.replaceChildren();
-      let type = 'tf';
-      const choice = SS.ui.segmented({ label: 'Test type', value: 'tf', options: [{ value: 'tf', label: 'True / False' }, { value: 'written', label: 'Written answer' }], onChange: v => { type = v; dirField.hidden = v !== 'written'; desc.textContent = v === 'tf' ? 'Decide if each term and definition pair is correct.' : 'Type the answer from memory. Small typos are forgiven.'; } });
-      const desc = el('p.hint', { text: 'Decide if each term and definition pair is correct.' });
-      const count = el('input.input', { type: 'number', min: 1, max: cards.length, value: Math.min(10, cards.length), inputMode: 'numeric', aria: { label: 'Number of questions' } });
-      const dir = SS.ui.select({ label: 'Answer format', value: 'def', options: [{ value: 'def', label: 'Show the term, type the definition' }, { value: 'term', label: 'Show the definition, type the term' }] });
-      const dirField = SS.ui.field('Written answer format', dir); dirField.hidden = true;
-      dlg.body.append(choice, desc, SS.ui.field('Number of questions', count, cards.length < 2 ? 'Add at least 2 cards to get false statements in True / False.' : `Up to ${cards.length} questions.`), dirField);
-      dlg.foot.append(el('button.btn', { type: 'button', text: 'Cancel', on: { click: () => dlg.close() } }), el('button.btn.btn-primary', { type: 'button', text: 'Start test', on: { click: () => start(type, dir.value, U.clampNum(count.value, 1, cards.length, Math.min(10, cards.length))) } }));
-    };
-    const build = (type, dir, count, poolCards) => {
-      const all = usable(quiz.cards), picked = shuffle(usable(poolCards || quiz.cards)).slice(0, count);
-      const falseSet = new Set(shuffle(picked.map((_, i) => i)).slice(0, Math.floor(picked.length / 2)));
-      return picked.map((c, i) => {
-        if (type === 'written') return dir === 'def' ? { prompt: c.term, expected: c.def, ask: 'Type the definition', card: c } : { prompt: c.def, expected: c.term, ask: 'Type the term', card: c };
-        let shown = c.def, isTrue = true;
-        if (falseSet.has(i)) { const donors = all.filter(o => cleanAnswer(o.term) !== cleanAnswer(c.term) && cleanAnswer(o.def) !== cleanAnswer(c.def)); if (donors.length) { shown = donors[Math.floor(Math.random() * donors.length)].def; isTrue = false; } }
-        return { term: c.term, def: c.def, shown, isTrue, card: c };
-      });
-    };
-    const start = (type, dir, count, poolCards) => { T.type = type; T.dir = dir; T.questions = build(type, dir, count, poolCards); T.answers = new Array(T.questions.length).fill(null); T.i = 0; question(); };
-    const question = () => {
-      const q = T.questions[T.i], n = T.questions.length; T.warned = false;
-      dlg.body.replaceChildren(); dlg.foot.replaceChildren();
-      const warn = el('span.q-warn');
-      dlg.body.append(el('div.q-meta', el('span', { text: `Question ${T.i + 1} of ${n}` }), warn), el('div.progress-track', el('div.progress-bar', { style: { width: `${((T.i + 1) / n) * 100}%` } })));
-      const box = el('div.q-card');
-      const add = (cls, value) => { const d = el('div', { class: cls, text: value }); box.append(d); return d; };
-      if (T.type === 'tf') {
-        add('q-label', 'Term'); add('q-text', q.term); add('q-label', 'Definition'); add('q-text', q.shown); add('q-label', 'Does this definition match the term?');
-        const row = el('div.tf-buttons');
-        [['True', true], ['False', false]].forEach(([label, value]) => { const b = el('button.btn', { type: 'button', text: label, aria: { pressed: String(T.answers[T.i] === value) }, on: { click: () => { T.answers[T.i] = value; row.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); } } }); row.append(b); });
-        box.append(row);
-      } else {
-        add('q-label', T.dir === 'def' ? 'Term' : 'Definition'); add('q-text', q.prompt);
-        const id = 'ans' + Date.now(); const label = el('label.q-label', { text: q.ask, attrs: { for: id } }); box.append(label);
-        const area = el('textarea.input.answer-input', { id, autocapitalize: 'off', spellcheck: false }); area.value = T.answers[T.i] || '';
-        area.addEventListener('input', () => { T.answers[T.i] = area.value; });
-        area.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); next(); } });
-        box.append(area); if (!U.isCoarse()) requestAnimationFrame(() => area.focus());
-      }
-      dlg.body.append(box);
-      const next = () => {
-        if (T.i < n - 1) { T.i++; question(); return; }
-        const blanks = T.answers.filter(a => a === null || (typeof a === 'string' && !a.trim())).length;
-        if (blanks && !T.warned) { T.warned = true; warn.textContent = `${blanks} unanswered will count as missed. Press Finish again to submit.`; return; }
-        finish();
-      };
-      dlg.foot.append(el('button.btn', { type: 'button', disabled: T.i === 0, on: { click: () => { T.i--; question(); } } }, SS.icon('chevL', 15), 'Back'), el('button.btn.btn-primary', { type: 'button', on: { click: next } }, T.i === n - 1 ? 'Finish test' : 'Next', T.i === n - 1 ? null : SS.icon('chevR', 15)));
-    };
-    const finish = () => { T.questions.forEach((q, i) => { const a = T.answers[i]; if (T.type === 'tf') { q.user = a; q.ok = a === q.isTrue; } else { q.user = a || ''; const g = gradeWritten(q.user, q.expected); q.ok = g.ok; q.close = g.close; } }); results(); };
-    const results = () => {
-      const total = T.questions.length, right = T.questions.filter(q => q.ok).length, pct = Math.round((right / total) * 100), missed = T.questions.filter(q => !q.ok);
-      dlg.body.replaceChildren(); dlg.foot.replaceChildren();
-      dlg.body.append(el('div.score', { text: `${right} / ${total} · ${pct}%` }), el('p.hint', { text: pct === 100 ? 'Perfect score. Nicely done.' : pct >= 80 ? 'Strong work. Review the few you missed.' : pct >= 50 ? 'Getting there. Retake the missed ones to lock them in.' : 'Keep going. Flip through the flashcards, then try again.' }), el('div.progress-track', el('div.progress-bar', { style: { width: `${pct}%` } })));
-      dlg.body.append(el('h3.q-missed-title', { text: missed.length ? `Missed (${missed.length})` : 'No missed questions' }));
-      const list = el('ol.missed-list');
-      missed.forEach(q => {
-        const li = el('li.missed-item');
-        const line = (label, value, cls) => li.append(el('div', el('strong', { text: label + ' ' }), el('span', { class: cls || '', text: value })));
-        if (T.type === 'tf') { line('Term:', q.term); line('Shown definition:', q.shown); line('Your answer:', q.user === null ? 'No answer' : (q.user ? 'True' : 'False'), 'bad'); line('Correct answer:', q.isTrue ? 'True' : `False. The right definition is “${q.def}”`, 'good'); }
-        else { line(T.dir === 'def' ? 'Term:' : 'Definition:', q.prompt); line('Your answer:', q.user.trim() || 'No answer', 'bad'); line('Correct answer:', q.expected, 'good'); li.append(el('button.btn.btn-sm', { type: 'button', text: 'Count as correct', on: { click: () => { q.ok = true; results(); } } })); }
-        list.append(li);
-      });
-      dlg.body.append(list);
-      if (missed.length) dlg.foot.append(el('button.btn.btn-primary', { type: 'button', text: 'Retake missed', on: { click: () => start(T.type, T.dir, missed.length, missed.map(q => q.card)) } }));
-      dlg.foot.append(el('button.btn', { type: 'button', text: 'New test', on: { click: setup } }), el('button.btn.btn-ghost', { type: 'button', text: 'Study flashcards', on: { click: () => { dlg.close(); C.study(quizId); } } }));
-    };
-    if (pool) start('tf', 'def', pool.length, pool); else setup();
-  };
+  /* Creating, editing, importing and quizzing now live in the Quiz tab (quiz-plus.js) */
+  C.edit = (quizId, opts) => SS.quiz.edit(quizId, opts);
+  C.remove = quizId => SS.quiz.remove(quizId);
+  C.library = () => SS.quiz.open('sets');
+  C.test = quizId => SS.quiz.practice(quizId);
 })(window.SS);
 </script>
   <script>/* js/legacy/ocr.js */
@@ -5255,12 +5243,13 @@ dialog .wl-desc { color: var(--ui-muted); }
   };
 
   K.scroll = (key, ...children) => el('div.w-scroll', { dataset: { sk: key } }, ...children);
-  K.kindIcon = kind => ({ assignment: 'checklist', event: 'calendar', exam: 'cap', reminder: 'bell', todo: 'checkSquare', class: 'clock' })[kind] || 'calendar';
-  K.kindLabel = kind => ({ assignment: 'Assignment', event: 'Event', exam: 'Exam', reminder: 'Reminder', todo: 'To-do' })[kind] || 'Item';
+  K.kindIcon = kind => ({ assignment: 'checklist', event: 'calendar', exam: 'cap', reminder: 'bell', todo: 'checkSquare', class: 'clock', gcal: 'calendar' })[kind] || 'calendar';
+  K.kindLabel = kind => ({ assignment: 'Assignment', event: 'Event', exam: 'Exam', reminder: 'Reminder', todo: 'To-do', gcal: 'Google Calendar event (read-only)' })[kind] || 'Item';
 
-  /* Open the right editor for an agenda item */
+  /* Open the right editor for an agenda item (Google events only open a read-only summary) */
   K.openItem = item => {
-    if (item.kind === 'assignment') SS.editors.assignment(item.id);
+    if (item.kind === 'gcal') SS.gcal.details(item);
+    else if (item.kind === 'assignment') SS.editors.assignment(item.id);
     else if (item.kind === 'event' || item.kind === 'exam') SS.editors.event(item.id);
     else if (item.kind === 'reminder') SS.editors.reminder(item.id);
     else if (item.kind === 'todo') SS.editors.todo(item.id);
@@ -5272,7 +5261,7 @@ dialog .wl-desc { color: var(--ui-muted); }
 
   /* One row in an agenda-style list */
   K.agendaRow = (it, opts = {}) => {
-    const color = it.subjectId ? SS.data.subjectColor(it.subjectId) : (it.kind === 'exam' ? 'var(--w-accent)' : 'var(--w-faint)');
+    const color = it.color || (it.subjectId ? SS.data.subjectColor(it.subjectId) : (it.kind === 'exam' ? 'var(--w-accent)' : 'var(--w-faint)'));
     const row = el('div.wl-item', { class: [it.done ? 'done' : '', 'k-' + it.kind].join(' '), style: { '--dot': color }, tabIndex: 0, role: 'button', aria: { label: `${K.kindLabel(it.kind)}: ${it.title}. Open details.` } });
     const toggleable = ['assignment', 'reminder', 'todo'].includes(it.kind);
     row.append(toggleable ? K.check(it.done, `Mark “${it.title}” ${it.done ? 'not done' : 'done'}`, v => K.toggleItem(it, v)) : el('span.wl-kind', SS.icon(K.kindIcon(it.kind), 15)));
@@ -5281,6 +5270,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     if (opts.showDate !== false) { const chip = SS.ui.dueChip(it.date, it.time, it.done); if (chip) meta.append(chip); }
     else if (it.time) meta.append(el('span.chip', { text: U.fmtTime(it.time) }));
     if (it.kind === 'exam') meta.append(el('span.chip.chip-exam', { text: 'Exam' }));
+    if (it.kind === 'gcal') meta.append(el('span.chip.chip-gcal', { title: `${it.calendar || 'Google Calendar'} — read-only`, style: { '--chip': it.color || '#4285f4' } }, SS.icon('lock', 11), el('span', { text: 'Google' })));
     const sc = SS.ui.subjectChip(it.subjectId); if (sc) meta.append(sc);
     if (it.priority === 'high' && !it.done) meta.append(el('span.chip.chip-high', { text: 'High' }));
     if (meta.children.length) main.append(meta);
@@ -5785,15 +5775,22 @@ dialog .wl-desc { color: var(--ui-muted); }
     description: 'Month, week and agenda views with your events, exams, assignment due dates and reminders.',
     keywords: 'month week agenda schedule events exams dates',
     sizes: { s: [4, 5], m: [5, 6], l: [7, 7], xl: [12, 8] }, size: 'm', min: [3, 3], sizeAware: true, stackH: 0,
-    defaults: () => ({ view: 'month', show: { assignment: true, event: true, exam: true, reminder: true, todo: false }, subjectId: '' }),
-    data: ['data:assignments', 'data:events', 'data:reminders', 'data:todos', 'data:subjects', 'day', 'prefs'],
+    defaults: () => ({ view: 'month', show: { assignment: true, event: true, exam: true, reminder: true, todo: false }, subjectId: '', showGoogle: true }),
+    data: ['data:assignments', 'data:events', 'data:reminders', 'data:todos', 'data:subjects', 'day', 'prefs', 'gcal'],
     mount(ctx) {
       const today = () => U.todayISO();
       let cursor = today();       // any day inside the visible month/week
       let selected = today();
       const kinds = () => Object.entries(ctx.config.show || {}).filter(([, v]) => v).map(([k]) => k);
       const weekStart = () => SS.prefs.get('weekStart') || 0;
-      const itemsBetween = (from, to) => SS.data.agenda({ from, to, kinds: kinds(), subjectId: ctx.config.subjectId, includeDone: true });
+      // Local items plus read-only Google events (when connected and not filtered to one subject)
+      const google = () => ctx.config.showGoogle !== false && !ctx.config.subjectId && SS.gcal.connected();
+      const itemsBetween = (from, to) => {
+        const local = SS.data.agenda({ from, to, kinds: kinds(), subjectId: ctx.config.subjectId, includeDone: true });
+        if (!google()) return local;
+        SS.gcal.want(from, to);
+        return [...local, ...SS.gcal.itemsBetween(from, to)].sort((a, b) => a.date.localeCompare(b.date) || (a.time || '99').localeCompare(b.time || '99') || a.title.localeCompare(b.title));
+      };
       const byDay = list => { const m = new Map(); list.forEach(it => { if (!m.has(it.date)) m.set(it.date, []); m.get(it.date).push(it); }); return m; };
 
       const addFor = (date, kind) => {
@@ -5803,16 +5800,21 @@ dialog .wl-desc { color: var(--ui-muted); }
           { label: 'Event', icon: 'calendar', onClick: () => SS.editors.event(null, { date }) },
           { label: 'Exam', icon: 'cap', onClick: () => SS.editors.event(null, { date, kind: 'exam' }) },
           { label: 'Assignment due', icon: 'checklist', onClick: () => SS.editors.assignment(null, { dueDate: date }) },
-          { label: 'Reminder', icon: 'bell', onClick: () => SS.editors.reminder(null, { date }) }
+          { label: 'Reminder', icon: 'bell', onClick: () => SS.editors.reminder(null, { date }) },
+          !SS.gcal.connected() && '-',
+          !SS.gcal.connected() && { label: 'Show Google Calendar events…', icon: 'link', onClick: () => SS.gcal.panel() }
         ], { anchor: ctx.body.querySelector('.cal-add') || ctx.el, label: 'Add to calendar' });
       };
 
       const chip = (it, compact) => {
-        const color = it.subjectId ? SS.data.subjectColor(it.subjectId) : (it.kind === 'exam' ? 'var(--w-accent)' : it.kind === 'reminder' ? '#f08c2e' : it.kind === 'todo' ? 'var(--w-faint)' : 'var(--w-accent)');
-        const c = el('button.cal-chip', { type: 'button', class: ['k-' + it.kind, it.done ? 'done' : ''].join(' '), style: { '--c': color }, title: `${K.kindLabel(it.kind)}: ${it.title}${it.time ? ' · ' + U.fmtTime(it.time) : ''}`, draggable: it.kind !== 'exam' || true, on: { click: e => { e.stopPropagation(); K.openItem(it); } } });
-        c.append(el('span.cal-chip-dot'), el('span.cal-chip-t', { text: (it.time && !compact ? U.fmtTime(it.time).replace(/:00| /g, '').toLowerCase() + ' ' : '') + it.title }));
-        c.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ kind: it.kind, id: it.id })); e.dataTransfer.effectAllowed = 'move'; c.classList.add('dragging'); });
-        c.addEventListener('dragend', () => c.classList.remove('dragging'));
+        const color = it.color || (it.subjectId ? SS.data.subjectColor(it.subjectId) : (it.kind === 'exam' ? 'var(--w-accent)' : it.kind === 'reminder' ? '#f08c2e' : it.kind === 'todo' ? 'var(--w-faint)' : 'var(--w-accent)'));
+        const remote = it.kind === 'gcal';   // Google events are read-only: not draggable, open a summary
+        const c = el('button.cal-chip', { type: 'button', class: ['k-' + it.kind, it.done ? 'done' : ''].join(' '), style: { '--c': color }, title: `${K.kindLabel(it.kind)}: ${it.title}${it.time ? ' · ' + U.fmtTime(it.time) : ''}`, draggable: !remote, on: { click: e => { e.stopPropagation(); K.openItem(it); } } });
+        c.append(el('span.cal-chip-dot'), remote ? el('span.cal-chip-g', { text: 'G', aria: { hidden: 'true' } }) : null, el('span.cal-chip-t', { text: (it.time && !compact ? U.fmtTime(it.time).replace(/:00| /g, '').toLowerCase() + ' ' : '') + it.title }));
+        if (!remote) {
+          c.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', JSON.stringify({ kind: it.kind, id: it.id })); e.dataTransfer.effectAllowed = 'move'; c.classList.add('dragging'); });
+          c.addEventListener('dragend', () => c.classList.remove('dragging'));
+        }
         return c;
       };
       const dropTarget = (node, date) => {
@@ -5821,7 +5823,8 @@ dialog .wl-desc { color: var(--ui-muted); }
         node.addEventListener('drop', e => {
           e.preventDefault(); node.classList.remove('drop');
           let d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; }
-          const field = { assignment: ['assignments', 'dueDate'], event: ['events', 'date'], exam: ['events', 'date'], reminder: ['reminders', 'date'], todo: ['todos', 'dueDate'] }[d.kind];
+          // only local items can move; anything else (e.g. a Google event) has no field here and is ignored
+          const field = { assignment: ['assignments', 'dueDate'], event: ['events', 'date'], exam: ['events', 'date'], reminder: ['reminders', 'date'], todo: ['todos', 'dueDate'] }[d && d.kind];
           if (!field) return;
           const prev = SS.data.get(field[0], d.id); if (!prev || prev[field[1]] === date) return;
           const old = prev[field[1]];
@@ -5841,8 +5844,22 @@ dialog .wl-desc { color: var(--ui-muted); }
             cursor !== today() || selected !== today() ? el('button.btn.btn-xs', { type: 'button', text: 'Today', on: { click: () => { cursor = selected = today(); update(); } } }) : null,
             ctx.size !== 'xs' && ctx.size !== 's' ? K.subjectFilter(ctx.config.subjectId, sid => ctx.setConfig({ subjectId: sid })) : null,
             el('div.w-seg', ['month', 'week', 'agenda'].map(x => el('button', { type: 'button', class: v === x ? 'on' : '', text: x[0].toUpperCase(), title: `${x[0].toUpperCase() + x.slice(1)} view`, aria: { label: `${x} view`, pressed: String(v === x) }, on: { click: () => ctx.setConfig({ view: x }) } }))),
+            google() ? googleButton() : null,
             el('button.icon-btn.sm.btn-accent.cal-add', { type: 'button', aria: { label: 'Add to calendar' }, title: 'Add event, exam, assignment or reminder', on: { click: () => addFor(selected) } }, SS.icon('plus', 15))));
         return bar;
+      };
+      /* Google sync state: refresh when signed in or signing in is needed; open the panel on errors */
+      const googleButton = () => {
+        const st = SS.gcal.status();
+        const label = st.state === 'ok' ? `Google Calendar is up to date${SS.gcal.lastRefresh() ? ` (${new Date(SS.gcal.lastRefresh()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})` : ''}. Refresh.` : st.state === 'loading' ? 'Updating Google events…' : st.message || 'Google Calendar';
+        return el('button.icon-btn.sm.cal-g', { type: 'button', class: `st-${st.state}`, title: label, aria: { label }, disabled: st.state === 'loading' || st.state === 'connecting', on: { click: () => (['ok', 'needs-auth', 'offline'].includes(st.state) ? SS.gcal.refresh() : SS.gcal.panel()) } }, el('span', { text: 'G', aria: { hidden: 'true' } }), st.state === 'loading' ? el('i.cal-g-spin') : null);
+      };
+      const googleNote = () => {
+        if (!google()) return null;
+        const st = SS.gcal.status();
+        if (!['needs-auth', 'error', 'offline'].includes(st.state) || !st.message) return null;
+        return el('div.cal-gnote', { class: `st-${st.state}`, role: 'status' }, el('span', { text: `Google Calendar: ${st.message}` }),
+          st.state === 'error' ? el('button.link-btn', { type: 'button', text: 'Details', on: { click: () => SS.gcal.panel() } }) : el('button.link-btn', { type: 'button', text: 'Refresh', on: { click: () => SS.gcal.refresh() } }));
       };
 
       const dayList = (date, items) => {
@@ -5865,6 +5882,7 @@ dialog .wl-desc { color: var(--ui-muted); }
         const compact = ctx.width < 300 || ctx.height < 300;
         const box = el('div.cal', { class: ['cal-month', wide ? 'wide' : '', compact ? 'compact' : ''].join(' ') });
         box.append(toolbar(U.fmtMonth(first), () => { cursor = U.addMonths(first, -1); update(); }, () => { cursor = U.addMonths(first, 1); update(); }));
+        U.put(box, googleNote());
         const grid = el('div.cal-grid', { role: 'grid', aria: { label: U.fmtMonth(first) } });
         U.weekdayNames(weekStart(), compact ? 'narrow' : 'short').forEach(n => grid.append(el('div.cal-wd', { role: 'columnheader', text: n })));
         const lastRowNeeded = days.slice(35).some(d => d.slice(0, 7) === first.slice(0, 7));
@@ -5900,6 +5918,7 @@ dialog .wl-desc { color: var(--ui-muted); }
         const label = start.slice(0, 7) === end.slice(0, 7) ? `${U.fmtDate(start, { month: 'long', day: 'numeric' })} – ${U.parseISO(end).getDate()}` : `${U.fmtDate(start, { month: 'short', day: 'numeric' })} – ${U.fmtDate(end, { month: 'short', day: 'numeric' })}`;
         const box = el('div.cal.cal-week', { class: ctx.width < 520 ? 'rows' : 'cols' });
         box.append(toolbar(label, () => { cursor = U.addDays(start, -7); update(); }, () => { cursor = U.addDays(start, 7); update(); }));
+        U.put(box, googleNote());
         const grid = el('div.cal-wgrid');
         days.forEach(d => {
           const list = items.get(d) || [];
@@ -5922,6 +5941,7 @@ dialog .wl-desc { color: var(--ui-muted); }
         const list = itemsBetween(from, to).filter(x => !x.done || x.date >= today());
         const box = el('div.cal.cal-agenda');
         box.append(toolbar(`${U.fmtDate(from, { month: 'short', day: 'numeric' })} – ${U.fmtDate(to, { month: 'short', day: 'numeric' })}`, () => { cursor = U.addDays(from, -30); update(); }, () => { cursor = U.addDays(from, 30); update(); }));
+        U.put(box, googleNote());
         if (!list.length) box.append(SS.ui.empty('calendar', 'Nothing in the next 30 days', 'Add an event, an exam or an assignment due date.'));
         else box.append(K.scroll('agenda', K.groupByDate(list, it => K.agendaRow(it, { showDate: false }))));
         return box;
@@ -5935,7 +5955,9 @@ dialog .wl-desc { color: var(--ui-muted); }
       { key: 'view', type: 'segmented', label: 'View', options: [{ value: 'month', label: 'Month' }, { value: 'week', label: 'Week' }, { value: 'agenda', label: 'Agenda' }] },
       { key: 'show', type: 'checks', label: 'Show on the calendar', options: [{ value: 'event', label: 'Events' }, { value: 'exam', label: 'Exams' }, { value: 'assignment', label: 'Assignment due dates' }, { value: 'reminder', label: 'Reminders' }, { value: 'todo', label: 'To-dos with dates' }] },
       { key: 'subjectId', type: 'subject', label: 'Only this subject' },
-      { type: 'note', text: 'Tip: drag an item onto another day to move it. Double-click a day to add something.' }
+      { key: 'showGoogle', type: 'toggle', label: 'Show Google Calendar events', hint: 'Read-only, from the calendars you pick. Hidden while filtering by subject.' },
+      { type: 'action', label: 'Google Calendar settings…', icon: 'calendar', run: () => SS.gcal.panel() },
+      { type: 'note', text: 'Tip: drag one of your own items onto another day to move it (Google events stay put — change them in Google Calendar). Double-click a day to add something.' }
     ],
     preview: () => { const g = el('div.pv-cal'); for (let i = 0; i < 21; i++) g.append(el('i', { class: i === 9 ? 'on' : i % 5 === 2 ? 'dot' : '' })); return g; }
   });
@@ -6402,12 +6424,34 @@ dialog .wl-desc { color: var(--ui-muted); }
   const svgEl = (tag, attrs) => { const n = document.createElementNS(ns, tag); Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v)); return n; };
 
   /* ======================= Study timer ======================= */
+  /* Any focus/break length from one second to one year, as hours, minutes and seconds */
+  function customTimes() {
+    const d = SS.ui.dialog({ eyebrow: 'Make time for your pace', title: 'Custom focus & breaks', size: 'md' });
+    const fields = {};
+    [['focus', 'Focus'], ['short', 'Short break'], ['long', 'Long break']].forEach(([key, label]) => {
+      const seconds = Math.round(SS.timer.state[key] * 60);
+      const num = (part, value, max) => el('input.input', { type: 'number', min: 0, max, step: 1, value, inputMode: 'numeric', aria: { label: `${label} ${part}` } });
+      fields[key] = [num('hours', Math.floor(seconds / 3600), 8760), num('minutes', Math.floor(seconds / 60) % 60, 59), num('seconds', seconds % 60, 59)];
+      d.body.append(el('h3.panel-h', { text: label }), el('div.timer-duration', SS.ui.field('Hours', fields[key][0]), SS.ui.field('Minutes', fields[key][1]), SS.ui.field('Seconds', fields[key][2])));
+    });
+    d.body.append(el('p.hint', { text: 'Set any duration from one second up to one year. Applying a duration resets the current timer.' }));
+    d.foot.append(el('button.btn', { type: 'button', text: 'Cancel', on: { click: () => d.close() } }), el('button.btn.btn-primary', { type: 'button', text: 'Apply times', on: { click: () => {
+      const values = {};
+      for (const [k, [h, m, s]] of Object.entries(fields)) {
+        const [hh, mm, ss] = [h, m, s].map(i => Number(i.value)); const total = hh * 3600 + mm * 60 + ss;
+        if (![hh, mm, ss].every(Number.isInteger) || hh < 0 || mm < 0 || mm > 59 || ss < 0 || ss > 59 || total < 1 || total > 31536000) { SS.ui.toast('Use whole hours, minutes 0–59 and seconds 0–59. Each duration must be 1 second to 1 year.', { kind: 'error' }); return; }
+        values[k] = total / 60;
+      }
+      SS.timer.setConfig(values); SS.timer.reset(); d.close();
+    } } }));
+  }
+  SS.timer.customTimes = customTimes;
   R.define({
     type: 'timer', name: 'Study timer', category: 'productivity', icon: 'timer',
     description: 'Pomodoro focus sessions with short and long breaks. Keeps running when you switch themes.',
     keywords: 'pomodoro focus break session countdown',
     sizes: { s: [3, 4], m: [4, 5], l: [5, 6], xl: [6, 8] }, size: 'm', min: [3, 3], sizeAware: true,
-    defaults: () => ({ display: 'ring', showControls: true }),
+    defaults: () => ({ display: 'ring', showControls: true, showPresets: true }),
     data: ['timer', 'prefs'],
     mount(ctx) {
       let refs = {};
@@ -6439,6 +6483,9 @@ dialog .wl-desc { color: var(--ui-muted); }
         box.append(controls);
         refs.sessions = el('div.timer-sessions');
         if (ctx.hsize === 'tall' || ctx.size === 'l' || ctx.size === 'xl') box.append(refs.sessions);
+        if (c.showPresets !== false && ctx.hsize !== 'short') box.append(el('div.timer-quick',
+          el('div.timer-presets', [[25, 5], [45, 15], [50, 10]].map(([focus, rest]) => el('button.btn.btn-xs', { type: 'button', text: `${focus} / ${rest}`, title: `${focus} minutes of focus, ${rest}-minute breaks`, on: { click: () => { SS.timer.setConfig({ focus, short: rest, long: rest }); SS.timer.reset(); SS.ui.toast(`${focus} minutes of focus / ${rest} minutes of rest.`, { timeout: 1800 }); } } }))),
+          el('button.link-btn.timer-custom', { type: 'button', text: 'Custom time', on: { click: customTimes } })));
         paint();
         return box;
       });
@@ -6471,7 +6518,9 @@ dialog .wl-desc { color: var(--ui-muted); }
       const t = (key, label, min, max) => ({ type: 'custom', render: () => SS.ui.slider({ label, min, max, step: 1, value: s[key], unit: ' min', onInput: v => SS.timer.setConfig({ [key]: v }) }) });
       return [
         { key: 'display', type: 'segmented', label: 'Display', options: [{ value: 'ring', label: 'Ring' }, { value: 'digits', label: 'Big digits' }, { value: 'bar', label: 'Bar' }] },
+        { key: 'showPresets', type: 'toggle', label: 'Show quick presets (25/5, 45/15, 50/10)' },
         { type: 'heading', text: 'Timer settings (shared by every timer widget)' },
+        { type: 'action', label: 'Set custom hours, minutes & seconds', icon: 'timer', run: customTimes },
         t('focus', 'Focus', 1, 120), t('short', 'Short break', 1, 30), t('long', 'Long break', 5, 60),
         { type: 'custom', render: () => SS.ui.slider({ label: 'Long break every', min: 2, max: 8, step: 1, value: s.longEvery, unit: ' sessions', onInput: v => SS.timer.setConfig({ longEvery: v }) }) },
         { type: 'custom', render: () => SS.ui.toggle({ label: 'Start breaks automatically', value: s.autoBreak, onChange: v => SS.timer.setConfig({ autoBreak: v }) }) },
@@ -6665,24 +6714,24 @@ dialog .wl-desc { color: var(--ui-muted); }
   /* ======================= Flashcards ======================= */
   R.define({
     type: 'flashcards', name: 'Flashcards', category: 'study', icon: 'cards', keepsContent: true,
-    description: 'Your study sets. Flip through cards or take a quick true/false or written practice test.',
-    keywords: 'study sets quiz test recall cards memorize',
+    description: 'Your study sets. Flip through cards, or start a quiz with your game beside it in the Quiz tab.',
+    keywords: 'study sets quiz test recall cards memorize quizlet game',
     sizes: { s: [4, 3], m: [6, 3], l: [8, 4], xl: [12, 4] }, size: 'm', min: [3, 3],
     defaults: () => ({}),
     data: ['data:quizzes', 'data:subjects'],
     mount(ctx) {
       const update = () => ctx.render(() => {
         const qs = SS.data.all('quizzes');
-        ctx.setActions([SS.ui.iconBtn('plus', 'New study set', () => SS.cards.edit(), 'sm'), SS.ui.iconBtn('book', 'Open library', () => SS.cards.library(), 'sm')]);
-        if (!qs.length) return SS.ui.empty('cards', 'No study sets yet', 'Type cards, paste them, or scan a photo of your notes.', el('button.btn.btn-sm', { type: 'button', on: { click: () => SS.cards.edit() } }, SS.icon('plus', 14), 'Create a set'));
+        ctx.setActions([SS.ui.iconBtn('plus', 'New study set', () => SS.cards.edit(), 'sm'), SS.ui.iconBtn('external', 'Open the Quiz tab', () => SS.quiz.open('sets'), 'sm')]);
+        if (!qs.length) return SS.ui.empty('cards', 'No study sets yet', 'Type cards, paste text exported from Quizlet, or scan a photo of your notes.', el('button.btn.btn-sm', { type: 'button', on: { click: () => SS.cards.edit() } }, SS.icon('plus', 14), 'Create a set'));
         const strip = el('div.deck-strip', { dataset: { sk: 'decks' } });
         qs.forEach((q, i) => {
           const subj = SS.data.subject(q.subjectId);
           strip.append(el('div.deck', { style: { '--k': subj ? subj.color : U.SUBJECT_COLORS[i % U.SUBJECT_COLORS.length] } },
             el('button.deck-main', { type: 'button', aria: { label: `Study ${q.title}` }, on: { click: () => SS.cards.study(q.id) } }, el('span.deck-name', { text: q.title }), el('span.deck-count', { text: `${U.plural(q.cards.length, 'card')}${subj ? ' · ' + subj.name : ''}` })),
             el('div.deck-actions',
-              el('button.btn.btn-xs', { type: 'button', text: 'Study', on: { click: () => SS.cards.study(q.id) } }),
-              el('button.btn.btn-xs', { type: 'button', text: 'Test', aria: { label: `Practice test: ${q.title}` }, on: { click: () => SS.cards.test(q.id) } }),
+              el('button.btn.btn-xs', { type: 'button', text: 'Cards', aria: { label: `Flashcards: ${q.title}` }, on: { click: () => SS.cards.study(q.id) } }),
+              el('button.btn.btn-xs', { type: 'button', text: 'Quiz', aria: { label: `Quiz & play: ${q.title}` }, on: { click: () => SS.quiz.practice(q.id) } }),
               el('button.icon-btn.xs', { type: 'button', aria: { label: `Edit ${q.title}` }, title: 'Edit', on: { click: () => SS.cards.edit(q.id) } }, SS.icon('edit', 13)))));
         });
         return strip;
@@ -6690,7 +6739,7 @@ dialog .wl-desc { color: var(--ui-muted); }
       update();
       return { update };
     },
-    settings: () => [{ type: 'action', label: 'Create a study set', icon: 'plus', run: () => SS.cards.edit() }, { type: 'action', label: 'Open the library', icon: 'book', run: () => SS.cards.library() }],
+    settings: () => [{ type: 'action', label: 'Create a study set', icon: 'plus', run: () => SS.cards.edit() }, { type: 'action', label: 'Import Quizlet text or CSV', icon: 'upload', run: () => SS.cards.edit(null, { mode: 'import' }) }, { type: 'action', label: 'Open the Quiz tab', icon: 'external', run: () => SS.quiz.open('sets') }],
     preview: () => el('div.pv-decks', el('i', { text: 'Bio' }), el('i', { text: 'Geo' }), el('i', { text: 'Hist' }))
   });
 
@@ -7258,15 +7307,16 @@ dialog .wl-desc { color: var(--ui-muted); }
     draw();
     dlg.foot.append(
       el('button.btn.mr-auto', { type: 'button', on: { click: () => { set(Object.fromEntries(Object.keys(raw()).map(k => [k, null]))); draw(); } } }, SS.icon('refresh', 15), 'Reset'),
-      el('button.btn', { type: 'button', title: 'Give every widget in this theme this look', on: { click: async () => {
-        if (!(await SS.ui.confirm({ title: 'Use this look for every widget?', message: 'All widgets in this theme get the same surface, effects and text style. Each widget keeps its title bar setting.', ok: 'Apply to all', danger: false }))) return;
+      el('button.btn', { type: 'button', title: 'Give every widget on this dashboard this look', on: { click: async () => {
+        const surface = SS.ws.surface();
+        if (!(await SS.ui.confirm({ title: 'Use this look for every widget?', message: `All widgets on “${surface.name}” get the same surface, effects and text style. Each widget keeps its title bar setting.`, ok: 'Apply to all', danger: false }))) return;
         const style = { ...raw() }; delete style.showHeader;
-        const prev = ws.widgets.map(x => [x.id, U.clone(x.style)]);
-        ws.widgets.forEach(x => { x.style = { ...style, ...(x.style.showHeader != null ? { showHeader: x.style.showHeader } : {}) }; });
-        SS.ws.touch(ws); SS.dash.restyleAll();
-        SS.undo.push('Look applied to all widgets', () => { prev.forEach(([wid, s]) => { const x = ws.widgets.find(y => y.id === wid); if (x) x.style = s; }); SS.ws.touch(ws); SS.dash.restyleAll(); });
+        const prev = surface.widgets.map(x => [x.id, U.clone(x.style)]);
+        surface.widgets.forEach(x => { x.style = { ...style, ...(x.style.showHeader != null ? { showHeader: x.style.showHeader } : {}) }; });
+        SS.ws.touch(surface); SS.dash.restyleAll();
+        SS.undo.push('Look applied to all widgets', () => { prev.forEach(([wid, s]) => { const x = surface.widgets.find(y => y.id === wid); if (x) x.style = s; }); SS.ws.touch(surface); SS.dash.restyleAll(); });
       } } }, 'Apply to all'),
-      el('button.btn', { type: 'button', text: 'Cancel', title: 'Undo the changes made in this panel', on: { click: () => { w.style = before; SS.ws.touch(ws); SS.dash.restyle(id); dlg.close(); } } }),
+      el('button.btn', { type: 'button', text: 'Cancel', title: 'Undo the changes made in this panel', on: { click: () => { w.style = before; SS.ws.touch(); SS.dash.restyle(id); dlg.close(); } } }),
       el('button.btn.btn-primary', { type: 'button', text: 'Done', on: { click: () => dlg.close() } }));
     focusWidgetBehind(id);
   };
@@ -7288,7 +7338,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     const grid = el('div.lib-grid', { role: 'list' });
     const all = [{ id: 'all', label: 'All widgets', icon: 'grid' }, ...SS.registry.CATEGORIES];
     const drawCats = () => { cats.replaceChildren(...all.map(c => el('button.lib-cat', { type: 'button', class: c.id === cat ? 'on' : '', aria: { pressed: String(c.id === cat) }, on: { click: () => { cat = c.id; drawCats(); draw(); } } }, SS.icon(c.icon, 16), el('span', { text: c.label }), el('span.lib-cat-n', { text: c.id === 'all' ? SS.registry.entries().length : SS.registry.entries().filter(e => e.category === c.id).length })))); };
-    const inUse = type => SS.ws.active().widgets.filter(w => w.type === type).length;
+    const inUse = type => SS.ws.surface().widgets.filter(w => w.type === type).length;
     const draw = () => {
       const q = query.trim().toLowerCase();
       const list = SS.registry.entries().filter(e => (cat === 'all' || e.category === cat) && (!q || `${e.name} ${e.description} ${e.keywords} ${e.category}`.toLowerCase().includes(q)));
@@ -7305,7 +7355,7 @@ dialog .wl-desc { color: var(--ui-muted); }
         try { preview.append(e.def.preview ? e.def.preview() : SS.icon(e.icon, 28)); } catch (_) { preview.append(SS.icon(e.icon, 28)); }
         grid.append(el('article.lib-card', { role: 'listitem' },
           preview,
-          el('div.lib-info', el('div.lib-name', el('span.lib-icon', SS.icon(e.icon, 15)), el('h3', { text: e.name }), n ? el('span.chip', { text: `${n} on this theme`, title: 'Already on this theme — you can add another' }) : null), el('p.lib-desc', { text: e.description })),
+          el('div.lib-info', el('div.lib-name', el('span.lib-icon', SS.icon(e.icon, 15)), el('h3', { text: e.name }), n ? el('span.chip', { text: `${n} here`, title: 'Already on this dashboard — you can add another' }) : null), el('p.lib-desc', { text: e.description })),
           el('div.lib-actions', sizes, el('button.btn.btn-primary.btn-sm', { type: 'button', aria: { label: `Add ${e.name}` }, on: { click: add } }, SS.icon('plus', 14), 'Add'))));
       });
     };
@@ -7324,13 +7374,13 @@ dialog .wl-desc { color: var(--ui-muted); }
   };
 
   P.templates = () => {
-    const dlg = SS.ui.dialog({ eyebrow: 'Layout templates', title: 'Arrange for an activity', subtitle: 'A template swaps the widgets on this theme for a ready-made arrangement. Your theme’s look and all your content stay the same.', size: 'lg', footer: false });
+    const dlg = SS.ui.dialog({ eyebrow: 'Layout templates', title: 'Arrange for an activity', subtitle: 'A template swaps the widgets on this dashboard for a ready-made arrangement. Your theme’s look and all your content stay the same.', size: 'lg', footer: false });
     const grid = el('div.tpl-grid');
     SS.presets.TEMPLATES.forEach(t => grid.append(el('article.tpl-card',
       P.layoutThumb(t.widgets),
       el('div.tpl-info', el('h3', SS.icon(t.icon, 16), el('span', { text: t.name })), el('p', { text: t.description }), el('p.hint', { text: t.widgets.map(r => SS.registry.get(r.type)?.name).filter(Boolean).join(' · ') })),
       el('button.btn.btn-sm', { type: 'button', on: { click: async () => {
-        const ws = SS.ws.active();
+        const ws = SS.ws.surface();
         if (ws.widgets.length && !(await SS.ui.confirm({ title: `Use the “${t.name}” layout?`, message: `The ${U.plural(ws.widgets.length, 'widget')} on “${ws.name}” will be replaced. Notes, assignments and everything else you’ve saved are kept. You can undo this.`, ok: 'Apply layout', danger: false }))) return;
         dlg.close(); SS.ws.applyTemplate(t.id);
       } } }, 'Apply'))));
@@ -7565,14 +7615,15 @@ dialog .wl-desc { color: var(--ui-muted); }
 
     /* ======== Layout ======== */
     function layout() {
-      const ws = SS.ws.active();
-      body.append(el('h3.panel-h', { text: 'Layout style' }),
+      const ws = SS.ws.surface(); const theme = SS.ws.active();
+      body.append(el('p.panel-note', SS.icon('info', 14), el('span', { text: SS.ws.isPage(ws) ? `These settings change the “${ws.name}” tab only. Other tabs and themes keep their own layouts.` : `These settings change the home dashboard of the “${theme.name}” theme. Custom tabs keep their own layouts.` })),
+        el('h3.panel-h', { text: 'Layout style' }),
         el('div.layout-choice',
           layoutCard('grid', 'grid', 'Grid', 'Widgets snap to a tidy grid and slide out of each other’s way. Best on most screens.'),
           layoutCard('canvas', 'canvas', 'Free canvas', 'Place widgets anywhere like a desktop, with snapping. Overlaps are prevented unless you allow them.')));
       if (ws.layout.mode === 'canvas') {
         body.append(SS.ui.toggle({ label: 'Allow widgets to overlap', value: ws.layout.allowOverlap, onChange: v => { ws.layout.allowOverlap = v; SS.ws.touch(ws); } }),
-          el('button.btn.btn-sm', { type: 'button', on: { click: () => { const width = SS.dash.inner.clientWidth || 1200; const g = ws.appearance.gap; const rowH = SS.layout.ROW[ws.appearance.density]; SS.layout.gridFromCanvas(ws, width, g, rowH); SS.layout.canvasFromGrid(ws, width, g, rowH); SS.ws.touch(ws); SS.dash.layoutPass(); SS.ui.toast('Tidied up', { kind: 'success' }); } } }, SS.icon('wand', 14), 'Tidy up (snap to grid, remove overlaps)'));
+          el('button.btn.btn-sm', { type: 'button', on: { click: () => { const width = SS.dash.inner.clientWidth || 1200; const g = theme.appearance.gap; const rowH = SS.layout.ROW[theme.appearance.density]; SS.layout.gridFromCanvas(ws, width, g, rowH); SS.layout.canvasFromGrid(ws, width, g, rowH); SS.ws.touch(ws); SS.dash.layoutPass(); SS.ui.toast('Tidied up', { kind: 'success' }); } } }, SS.icon('wand', 14), 'Tidy up (snap to grid, remove overlaps)'));
       }
       body.append(el('h3.panel-h', { text: 'Quick actions' }),
         el('div.row-gap',
@@ -7589,10 +7640,10 @@ dialog .wl-desc { color: var(--ui-muted); }
           el('button.btn.btn-sm', { type: 'button', disabled: !ws.layout.mobileOrder, on: { click: () => { ws.layout.mobileOrder = null; SS.ws.touch(ws); SS.dash.layoutPass(); draw(); SS.ui.toast('Phone order follows desktop again'); } } }, 'Reset phone order')));
     }
     function layoutCard(mode, icon, title, desc) {
-      const ws = SS.ws.active();
+      const ws = SS.ws.surface(); const theme = SS.ws.active();
       return el('button.layout-card', { type: 'button', class: ws.layout.mode === mode ? 'on' : '', aria: { pressed: String(ws.layout.mode === mode) }, on: { click: () => {
         if (ws.layout.mode === mode) return;
-        const width = Math.max(600, SS.dash.inner.clientWidth || 1200); const g = ws.appearance.gap; const rowH = SS.layout.ROW[ws.appearance.density];
+        const width = Math.max(600, SS.dash.inner.clientWidth || 1200); const g = theme.appearance.gap; const rowH = SS.layout.ROW[theme.appearance.density];
         const prev = U.clone({ layout: ws.layout, widgets: ws.widgets.map(w => ({ id: w.id, pos: w.pos, canvas: w.canvas })) });
         if (mode === 'canvas') { SS.layout.canvasFromGrid(ws, width, g, rowH); ws.layout.mode = 'canvas'; }
         else { SS.layout.gridFromCanvas(ws, width, g, rowH); ws.layout.mode = 'grid'; ws.layout.mdCustom = false; }
@@ -7644,7 +7695,10 @@ dialog .wl-desc { color: var(--ui-muted); }
         el('div.row-gap',
           el('button.btn.btn-primary.btn-sm', { type: 'button', on: { click: () => P.exportBackup(incImg).then(draw) } }, SS.icon('download', 14), 'Download backup'),
           el('button.btn.btn-sm', { type: 'button', on: { click: () => P.importBackup() } }, SS.icon('upload', 14), 'Restore from backup…')),
-        el('p.hint', { text: 'A backup includes every theme, widget, note, assignment, event, reminder, flashcard set and setting.' }));
+        el('p.hint', { text: 'A backup includes every theme, custom tab, widget, note, assignment, event, reminder, study set, game board, win and setting. It never includes Google Calendar access or the copy of your Google events.' }));
+      body.append(el('h3.panel-h', { text: 'Google Calendar (optional)' }),
+        el('p.hint', { text: SS.gcal.privacyText() }),
+        el('button.btn.btn-sm', { type: 'button', on: { click: () => SS.gcal.panel() } }, SS.icon('calendar', 14), SS.gcal.connected() ? 'Manage Google Calendar' : 'Connect Google Calendar…'));
       body.append(el('h3.panel-h.danger', { text: 'Reset' }),
         el('div.danger-zone',
           el('div', el('b', { text: 'Reset all themes' }), el('p.hint', { text: 'Puts every built-in theme back to its original design and removes your custom themes. Content is kept.' }),
@@ -7666,9 +7720,12 @@ dialog .wl-desc { color: var(--ui-muted); }
   };
 
   /* ---------------- Backup / restore ---------------- */
+  /* Version 3: content, themes, custom tabs and sidebar order, settings, timer, study & play state
+     (moves, wins, boards, game settings, quiz in progress) and photos. Google Calendar access and its
+     cached events are never included — they belong to the Google account, not to this backup. */
   P.exportBackup = async (includeImages = true) => {
     await SS.store.flush();
-    const payload = { app: 'studyspace', version: 2, exportedAt: new Date().toISOString(), content: SS.data.snapshot(), workspaces: SS.ws.serialize(), prefs: SS.prefs.all(), timer: SS.timer.state, arcade: SS.arcade?.state, images: includeImages ? await SS.store.images.all() : [] };
+    const payload = { app: 'studyspace', version: 3, exportedAt: new Date().toISOString(), content: SS.data.snapshot(), workspaces: SS.ws.serialize(), prefs: SS.prefs.all(), timer: SS.timer.state, play: SS.play.serialize(), images: includeImages ? await SS.store.images.all() : [] };
     const stamp = U.todayISO();
     U.download(`Tester-backup-${stamp}.json`, JSON.stringify(payload));
     SS.prefs.set('lastBackupAt', Date.now());
@@ -7685,45 +7742,66 @@ dialog .wl-desc { color: var(--ui-muted); }
       // Validate everything before touching current data
       const content = {}; let total = 0;
       SS.data.COLLECTIONS.forEach(c => { content[c] = SS.data.sanitize(c, parsed.content[c]); total += content[c].length; });
-      const wsList = (U.isObj(parsed.workspaces) && Array.isArray(parsed.workspaces.list) ? parsed.workspaces.list : []).map(x => SS.ws.sanitizeWorkspace(x)).filter(Boolean);
+      const rawWs = U.isObj(parsed.workspaces) ? parsed.workspaces : {};
+      const wsList = (Array.isArray(rawWs.list) ? rawWs.list : []).map(x => SS.ws.sanitizeWorkspace(x)).filter(Boolean);
+      const pages = (Array.isArray(rawWs.pages) ? rawWs.pages : []).map(SS.ws.sanitizePage).filter(Boolean).slice(0, SS.ws.MAX_PAGES);
+      // version 1–2 backups carried the old reward record as "arcade"; it converts like the old localStorage copy
+      const rawPlay = U.isObj(parsed.play) ? parsed.play : U.isObj(parsed.arcade) ? parsed.arcade : null;
+      const play = rawPlay ? SS.play.sanitize(rawPlay) : null;
       const images = (Array.isArray(parsed.images) ? parsed.images : []).filter(i => U.isObj(i) && typeof i.id === 'string' && typeof i.data === 'string' && /^data:image\//.test(i.data)).map(i => ({ id: i.id.slice(0, 80), data: i.data, kind: i.kind === 'widget' ? 'widget' : 'bg', name: U.str(i.name, 200), at: Number(i.at) || Date.now() }));
       const counts = ['notes', 'assignments', 'events', 'reminders', 'todos', 'quizzes', 'subjects'].map(c => `${content[c].length} ${c === 'quizzes' ? 'study sets' : c === 'todos' ? 'to-dos' : c}`).join(', ');
+      const wins = play ? SS.play.GAMES.reduce((n, id) => n + play.wins[id], 0) : 0;
       const dlg = SS.ui.dialog({ eyebrow: 'Restore', title: 'Restore this backup?', size: 'sm' });
-      dlg.body.append(el('p.dlg-message', { text: `Backup from ${parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleString() : 'an unknown date'}.` }), el('p.hint', { text: `${counts}; ${U.plural(wsList.length, 'theme')}; ${U.plural(images.length, 'photo')}.` }),
-        el('p.hint', { text: 'Merge adds anything you don’t already have. Replace makes this browser match the backup exactly.' }));
+      dlg.body.append(el('p.dlg-message', { text: `Backup from ${parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleString() : 'an unknown date'}.` }),
+        el('p.hint', { text: `${counts}; ${U.plural(wsList.length, 'theme')}; ${U.plural(pages.length, 'custom tab')}; ${U.plural(images.length, 'photo')}${play ? `; game progress with ${U.plural(wins, 'win')}` : ''}.` }),
+        el('p.hint', { text: 'Merge adds anything you don’t already have (wins and moves keep the higher count, never both added together). Replace makes this browser match the backup exactly.' }));
       dlg.foot.append(el('button.btn', { type: 'button', text: 'Cancel', on: { click: () => dlg.close() } }),
-        el('button.btn', { type: 'button', text: 'Merge', on: { click: async () => { dlg.close(); await applyImport('merge', { content, wsList, images, parsed }); } } }),
-        el('button.btn.btn-danger', { type: 'button', text: 'Replace everything', on: { click: async () => { if (!(await SS.ui.confirm({ title: 'Replace everything?', message: 'Your current content, themes and settings will be replaced by the backup. Consider downloading a backup of what you have now first.', ok: 'Replace' }))) return; dlg.close(); await applyImport('replace', { content, wsList, images, parsed }); } } }));
-      if (!total && !wsList.length) dlg.body.append(el('p.hint', { text: 'This backup is empty.' }));
+        el('button.btn', { type: 'button', text: 'Merge', on: { click: async () => { dlg.close(); await applyImport('merge', { content, wsList, pages, play, images, parsed }); } } }),
+        el('button.btn.btn-danger', { type: 'button', text: 'Replace everything', on: { click: async () => { if (!(await SS.ui.confirm({ title: 'Replace everything?', message: 'Your current content, themes, tabs, game progress and settings will be replaced by the backup. Consider downloading a backup of what you have now first.', ok: 'Replace' }))) return; dlg.close(); await applyImport('replace', { content, wsList, pages, play, images, parsed }); } } }));
+      if (!total && !wsList.length && !pages.length) dlg.body.append(el('p.hint', { text: 'This backup is empty.' }));
     });
     inp.click();
   };
-  async function applyImport(mode, { content, wsList, images, parsed }) {
+  const sameRecord = (a, b) => { const strip = x => JSON.stringify({ ...x, updatedAt: 0, createdAt: 0, origin: null }); return strip(a) === strip(b); };
+  async function applyImport(mode, { content, wsList, pages, play, images, parsed }) {
     for (const img of images) { try { await SS.store.images.put(img); SS.theme.images.set(img.id, img.data); } catch (_) { /* skip photos that don't fit */ } }
+    const rawWs = U.isObj(parsed.workspaces) ? parsed.workspaces : {};
     if (mode === 'replace') {
       SS.data.COLLECTIONS.forEach(c => SS.data.set(c, content[c]));
-      if (wsList.length) { SS.ws.load({ list: wsList, activeId: parsed.workspaces.activeId }); SS.ws.save(); }
+      if (wsList.length) { SS.ws.load({ list: wsList, activeId: rawWs.activeId, pages, order: rawWs.order, view: rawWs.view }); SS.ws.save(); }
       if (U.isObj(parsed.prefs)) { SS.prefs.load(parsed.prefs); SS.prefs.save(); }
-      if (U.isObj(parsed.arcade)) SS.arcade?.restore(parsed.arcade);
+      SS.play.load(play || null); SS.play.save();
       if (U.isObj(parsed.timer)) { SS.timer.load({ ...parsed.timer, running: false }); SS.store.save('timer', () => SS.timer.state); }
     } else {
-      let added = 0;
+      let added = 0, themes = 0, tabs = 0;
       SS.data.COLLECTIONS.forEach(c => { const have = new Set(SS.data.all(c).map(x => x.id)); const extra = content[c].filter(x => !have.has(x.id)); if (extra.length) { SS.data.set(c, [...SS.data.all(c), ...extra]); added += extra.length; } });
+      // the same theme or tab imported twice isn't duplicated; a different one with a clashing id or name is kept as a copy
       const names = new Set(SS.ws.all().map(w => w.name));
-      wsList.forEach(w => { if (SS.ws.get(w.id)) w.id = U.uid('ws'); if (names.has(w.name)) w.name = `${w.name} (imported)`.slice(0, 40); SS.ws.state.list.push(w); });
+      wsList.forEach(w => { const mine = SS.ws.get(w.id); if (mine && sameRecord(mine, w)) return; if (mine) w.id = U.uid('ws'); if (names.has(w.name)) w.name = `${w.name} (imported)`.slice(0, 40); SS.ws.state.list.push(w); themes++; });
+      pages.forEach(p => { const mine = SS.ws.page(p.id); if (mine && sameRecord(mine, p)) return; if (SS.ws.pages().length >= SS.ws.MAX_PAGES) return; if (mine) { p.id = U.uid('pg'); p.name = `${p.name} (imported)`.slice(0, 40); } SS.ws.state.pages.push(p); tabs++; });
+      SS.ws.state.order = SS.ws.sanitizeOrder(SS.ws.state.order, SS.ws.state.pages);
       SS.ws.save();
-      SS.ui.toast(`Merged: ${U.plural(added, 'item')} and ${U.plural(wsList.length, 'theme')} added`, { kind: 'success' });
+      if (play) {
+        const st = SS.play.state;
+        SS.play.GAMES.forEach(id => { st.wins[id] = Math.max(st.wins[id], play.wins[id]); st.actions[id] = Math.max(st.actions[id], play.actions[id]); if (!U.isObj(st.gameData[id]) && U.isObj(play.gameData[id])) st.gameData[id] = play.gameData[id]; });
+        ['correct', 'answered', 'sessions'].forEach(k => { st.stats[k] = Math.max(st.stats[k], play.stats[k]); });
+        SS.play.save();
+      }
+      SS.ui.toast(`Merged: ${U.plural(added, 'item')}, ${U.plural(themes, 'theme')} and ${U.plural(tabs, 'tab')} added`, { kind: 'success' });
     }
     await SS.store.flush();
     SS.theme.applyGlobalPrefs();
+    SS.bus.emit('play', { type: 'load' });
+    SS.bus.emit('nav');
+    SS.ws.setView(SS.ws.view(), { force: true });
     SS.ws.switchTo(SS.ws.active().id, { instant: true });
     SS.bus.emit('ws:list'); SS.bus.emit('prefs', { key: 'all' });
-    SS.dash.render();
-    if (mode === 'replace') SS.ui.toast('Backup restored', { kind: 'success' });
+    if (SS.store.status === 'error') SS.ui.toast('The backup was read, but this browser couldn’t save all of it. Free up space and try again.', { kind: 'error', timeout: 0 });
+    else if (mode === 'replace') SS.ui.toast('Backup restored', { kind: 'success' });
   }
   P.eraseAll = async () => {
     try {
-      SS.arcade?.erase();
+      SS.play.clearLegacy();
       const keys = await SS.store.keys();
       for (const k of keys) await SS.store.remove(k);
       for (const img of await SS.store.images.all()) await SS.store.images.remove(img.id);
@@ -7804,8 +7882,9 @@ dialog .wl-desc { color: var(--ui-muted); }
 
   P.shortcuts = () => {
     const dlg = SS.ui.dialog({ eyebrow: 'Help', title: 'Keyboard shortcuts', size: 'md', footer: false });
-    const rows = [['E', 'Edit layout on / off'], ['A', 'Add a widget'], ['N', 'Quick add'], ['Q', 'Jump to Quick capture (if on this theme)'], [',', 'Customize'], ['T', 'Switch theme'], ['[ / ]', 'Previous / next theme'], ['Ctrl + Z', 'Undo the last delete or move'], ['P', 'Start / pause the study timer'], ['?', 'This list'],
-      ['—', ''], ['Right-click', 'Widget menu (or press the ⋯ button, Shift+F10, or the Menu key)'], ['Arrow keys', 'On a widget’s grip in edit mode: move it'], ['Shift + arrows', 'On the grip: resize'], ['Alt + ↑ / ↓', 'Reorder a to-do'], ['Esc', 'Close a dialog or menu']];
+    const rows = [['E', 'Edit layout on / off'], ['A', 'Add a widget'], ['N', 'Quick add'], ['Q', 'Jump to Quick capture (if on this dashboard)'], [',', 'Customize'], ['T', 'Switch theme'], ['[ / ]', 'Previous / next theme'], ['Ctrl + Z', 'Undo the last delete or move'], ['P', 'Start / pause the study timer'], ['?', 'This list'],
+      ['—', ''], ['Right-click', 'Widget menu (or press the ⋯ button, Shift+F10, or the Menu key)'], ['Arrow keys', 'On a widget’s grip in edit mode: move it'], ['Shift + arrows', 'On the grip: resize'], ['Alt + ↑ / ↓', 'Reorder a to-do, a sidebar tab, or a card in the set editor'], ['Esc', 'Close a dialog or menu'],
+      ['—', ''], ['1 – 4 / T, F', 'Quiz: choose an answer'], ['Enter', 'Quiz: check a written answer, then go to the next question'], ['Arrow keys', 'Game panel: play (only while focus is in the game)'], ['Space', 'Tetris: drop the piece (only while focus is in the game)']];
     dlg.body.append(el('table.kbd-table', el('tbody', rows.map(([k, d]) => k === '—' ? el('tr.sep', el('td', { attrs: { colspan: 2 } })) : el('tr', el('td', k.split(' / ').map((x, i) => [i ? ' / ' : '', ...x.split(' + ').map((y, j) => [j ? ' + ' : '', el('kbd', { text: y })])])), el('td', { text: d }))))));
   };
 
@@ -7815,12 +7894,14 @@ dialog .wl-desc { color: var(--ui-muted); }
     const dlg = SS.ui.dialog({ title: migrated ? 'Your Tester got an upgrade' : 'Welcome to Tester', size: 'lg', class: 'dlg-welcome', dismissable: true, focus: '.dlg-foot .btn-primary', onClose: () => { SS.prefs.set('onboarded', true); if (migrated) SS.prefs.set('upgradeSeen', true); } });
     const name = SS.ui.input({ value: SS.prefs.get('name'), placeholder: 'Your first name (optional)', label: 'Your name', maxLength: 30 });
     const tips = el('ul.welcome-tips',
-      el('li', SS.icon('layers', 18), el('div', el('b', { text: 'Themes are whole workspaces.' }), el('span', { text: ' Each one keeps its own background, widgets and layout. Switch from the top bar.' }))),
+      el('li', SS.icon('cards', 18), el('div', el('b', { text: 'Quiz, then play.' }), el('span', { text: ' The Quiz tab in the sidebar holds your study sets and flashcards. Quiz yourself with a game beside the questions — every 3 correct answers unlock 3 moves.' }))),
+      el('li', SS.icon('list', 18), el('div', el('b', { text: 'Add your own tabs.' }), el('span', { text: ' “Add tab” in the sidebar makes an empty dashboard with its own widgets. Rename, reorder or delete tabs any time.' }))),
+      el('li', SS.icon('layers', 18), el('div', el('b', { text: 'Themes set the look.' }), el('span', { text: ' Each theme keeps its own background and home layout. Switch from the top bar.' }))),
       el('li', SS.icon('move', 18), el('div', el('b', { text: 'Make it yours.' }), el('span', { text: ' Press Edit to drag, resize and lock widgets, or right-click any widget for its menu.' }))),
       el('li', SS.icon('database', 18), el('div', el('b', { text: 'One set of content.' }), el('span', { text: ' Assignments, notes and events are shared by every widget and theme. Removing a widget never deletes them.' }))),
       el('li', SS.icon('lock', 18), el('div', el('b', { text: 'Private by default.' }), el('span', { text: ' Everything is saved in this browser only. Download a backup in Customize → Data.' }))));
     if (migrated) {
-      dlg.body.append(el('p.dlg-message', { text: 'Everything you had is still here — your notes, images, folders, study sets, homework, GPA classes, countdowns, timer and your colours. They now live in a theme called “My Tester”, and there are ten new themes to try.' }), tips);
+      dlg.body.append(el('p.dlg-message', { text: 'Everything you had is still here — your notes, images, folders, study sets, homework, GPA classes, countdowns, timer and your colours. They now live in a theme called “My Tester”, and there are more built-in themes to try.' }), tips);
     } else {
       dlg.body.append(el('p.dlg-message', { text: 'A personal study desk for assignments, notes, exams and focus — arranged exactly how you like it.' }), SS.ui.field('What should we call you?', name));
       if (!fromMenu) {
@@ -7905,7 +7986,8 @@ dialog .wl-desc { color: var(--ui-muted); }
       { label: 'Add widget…', icon: 'grid', kbd: 'A', onClick: () => SS.panels.library() },
       { label: 'Layout templates…', icon: 'layout', onClick: () => SS.panels.templates() },
       { label: 'Notebook (full screen)', icon: 'notebook', onClick: () => SS.panels.notebook() },
-      { label: 'Flashcard library', icon: 'cards', onClick: () => SS.cards.library() },
+      { label: 'Quiz — sets, flashcards & games', icon: 'cards', onClick: () => SS.quiz.open('sets') },
+      { label: 'Google Calendar…', icon: 'calendar', onClick: () => SS.gcal.panel() },
       { label: 'Scan a photo to text', icon: 'camera', onClick: () => SS.ocr.open({ onInsert: text => { const f = SS.data.all('folders')[0] || SS.data.add('folders', { name: 'My notes' }); const n = SS.data.add('notes', { folderId: f.id, title: 'Scanned text', content: text }); SS.panels.notebook(n.id); } }) },
       '-',
       { label: 'Themes…', icon: 'layers', kbd: 'T', onClick: () => SS.panels.customize('themes') },
@@ -7952,12 +8034,13 @@ dialog .wl-desc { color: var(--ui-muted); }
   function paintEditBar() {
     const hint = document.getElementById('ebHint'); const mode = document.getElementById('ebMode');
     if (!hint || !mode) return;
-    const ws = SS.ws.active();
+    const ws = SS.ws.surface();
     const bp = SS.dash.bp;
     hint.textContent = bp === 'sm' ? 'Drag the grip or use the arrows to reorder.' : U.isCoarse() ? 'Drag a widget’s grip to move it; drag the corner to resize.' : 'Drag widgets to move them, drag the corner to resize. Alt-drag on the canvas skips snapping.';
     mode.replaceChildren(bp === 'sm' ? '' : SS.ui.segmented({ label: 'Layout style', value: ws.layout.mode, size: 'sm', options: [{ value: 'grid', label: 'Grid', icon: 'grid' }, { value: 'canvas', label: 'Canvas', icon: 'canvas' }], onChange: v => {
-      const w = SS.ws.active(); if (w.layout.mode === v) return;
-      const width = Math.max(600, SS.dash.inner.clientWidth || 1200), g = w.appearance.gap, rowH = SS.layout.ROW[w.appearance.density];
+      const w = SS.ws.surface(); if (w.layout.mode === v) return;
+      const look = SS.ws.active().appearance;
+      const width = Math.max(600, SS.dash.inner.clientWidth || 1200), g = look.gap, rowH = SS.layout.ROW[look.density];
       const prev = U.clone({ layout: w.layout, widgets: w.widgets.map(x => ({ id: x.id, pos: x.pos, canvas: x.canvas })) });
       if (v === 'canvas') SS.layout.canvasFromGrid(w, width, g, rowH); else { SS.layout.gridFromCanvas(w, width, g, rowH); w.layout.mdCustom = false; }
       w.layout.mode = v; SS.ws.touch(w, { layout: true }); SS.dash.render();
@@ -7988,6 +8071,8 @@ dialog .wl-desc { color: var(--ui-muted); }
         ']': () => cycle(1)
       };
       if (k === 'Escape' && SS.dash.editing) { SS.dash.setEditing(false); return; }
+      // Dashboard shortcuts do nothing on the Quiz tab, so keys there only reach the quiz or the focused game
+      if (SS.ws.view() === 'quiz' && ['e', 'a', 'q'].includes(k.toLowerCase())) return;
       const fn = shortcuts[k.toLowerCase()] || shortcuts[k];
       if (fn) { e.preventDefault(); fn(); }
     });
@@ -8000,10 +8085,13 @@ dialog .wl-desc { color: var(--ui-muted); }
   }
 })(window.SS);
 </script>
+  <script src="config.js"></script>
   <script src="study-plus.js"></script>
   <script src="chess.js"></script>
   <script src="arcade-games.js"></script>
   <script src="quiz-plus.js"></script>
+  <script src="gcal.js"></script>
+  <script src="nav.js"></script>
   <script>/* js/main.js */
 /* Tester — startup: load saved data (or migrate the previous single-page version, or seed a first
    run), then start the app. Saved data is validated on load and never silently thrown away. */
@@ -8024,13 +8112,37 @@ dialog .wl-desc { color: var(--ui-muted); }
     return v;
   }
 
+  /* Study & play state. Version 1 lived in localStorage ("studyspace-play-v1") with a points economy;
+     it is converted once, and the old copy is removed only after the new one is confirmed saved. */
+  async function loadPlay(meta) {
+    const saved = await loadKey('play', U.isObj);
+    if (saved) { SS.play.load(saved); return; }
+    const legacy = SS.play.readLegacy();
+    SS.play.load(legacy);
+    if (legacy) {
+      const p = U.isObj(legacy.profile) ? legacy.profile : {};
+      if (p.width || p.collapsed) SS.prefs.set('sidebar', { width: U.clampNum(Math.round(p.width), 200, 380, 248), collapsed: !!p.collapsed && innerWidth > 700 });
+      meta.migrations = { ...(meta.migrations || {}), play: Date.now() };
+    }
+    SS.play.save();
+    await SS.store.flush();
+    if (legacy && SS.store.mode !== 'memory' && SS.store.status !== 'error') {
+      const check = await SS.store.get('play');
+      if (U.isObj(check) && check.version === SS.play.VERSION) SS.play.clearLegacy();
+    }
+  }
+
   async function loadAll(meta) {
     SS.prefs.load(await loadKey('prefs', U.isObj));
     SS.timer.load(await loadKey('timer', U.isObj));
     const byColl = {};
     for (const c of SS.data.COLLECTIONS) byColl[c] = (await loadKey('c:' + c, Array.isArray)) || [];
     SS.data.load(byColl);
-    SS.ws.load(await loadKey('workspaces', v => U.isObj(v) && Array.isArray(v.list)));
+    const rawWs = await loadKey('workspaces', v => U.isObj(v) && Array.isArray(v.list));
+    SS.ws.load(rawWs);
+    // version 1 → 2 adds custom tabs; removed reward widgets were dropped while loading
+    if (rawWs && rawWs.version !== 2) { SS.ws.save(); meta.migrations = { ...(meta.migrations || {}), workspaces2: Date.now() }; }
+    await loadPlay(meta);
     // New built-in themes from later versions are added once; ones the student deleted stay deleted.
     const seen = new Set(meta.presetsSeen || []);
     const fresh = SS.presets.PRESETS.filter(p => !seen.has(p.id));
@@ -8152,6 +8264,7 @@ dialog .wl-desc { color: var(--ui-muted); }
       SS.ws.load({ list: [] });
       SS.ws.seedPresets('study-play');
     }
+    await loadPlay(meta);
     meta.presetsSeen = SS.presets.PRESETS.map(p => p.id);
     SS.data.saveAll(); SS.prefs.save(); SS.ws.save();
     SS.store.save('timer', () => SS.timer.state);
@@ -8167,9 +8280,11 @@ dialog .wl-desc { color: var(--ui-muted); }
       // Never treat a browser that already has content as a first run (e.g. if only the meta record is damaged)
       const hasData = !meta && (await SS.store.keys()).some(k => k.startsWith('c:') || k === 'workspaces');
       const isNew = !meta && !hasData;
-      if (!meta) meta = { version: 2, createdAt: Date.now(), migratedFrom: null, presetsSeen: hasData ? SS.presets.PRESETS.map(p => p.id) : [] };
+      if (!meta) meta = { version: 3, createdAt: Date.now(), migratedFrom: null, presetsSeen: hasData ? SS.presets.PRESETS.map(p => p.id) : [] };
       if (isNew) await firstRun(meta);
       else await loadAll(meta);
+      meta.version = 3;
+      SS.store.save('meta', () => meta);
       SS.meta = meta;
       SS.theme.applyGlobalPrefs();
       SS.audio.init();
@@ -8177,11 +8292,12 @@ dialog .wl-desc { color: var(--ui-muted); }
       SS.dash.init(document.getElementById('dash'));
       SS.ws.state.activeId = SS.ws.initialId();
       SS.theme.apply(SS.ws.active(), { instant: true });
+      SS.nav.init();
       SS.dash.render();
       SS.timer.resume();
       SS.clock.start();
       SS.reminders.start();
-      SS.arcade.init();
+      SS.gcal.init();
       document.documentElement.classList.remove('booting');
       if (notices.length) SS.ui.toast(`Some saved data (${notices.join(', ')}) couldn’t be read. A copy was kept and the rest loaded normally.`, { kind: 'error', timeout: 0 });
       if (SS.store.mode === 'memory') SS.ui.toast('This browser is blocking storage, so changes won’t be kept after you close the tab. Export a backup from Customize → Data.', { kind: 'error', timeout: 0 });

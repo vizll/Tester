@@ -1,0 +1,26 @@
+/* Tester — Google Calendar (read-only) bits: chips, the calendar widget's sync button and note, the panel. */
+.chip-gcal { color: var(--c-text); background: color-mix(in srgb, var(--chip) 18%, transparent); gap: 3px; }
+.cal-chip-g { flex: 0 0 auto; font: 800 .58rem/1 var(--font-body); padding: 1px 3px; border-radius: 4px; color: #fff; background: var(--c); margin-right: 3px; }
+.cal-chip.k-gcal { cursor: pointer; }
+.cal-g { position: relative; font: 800 .8rem/1 var(--font-body); color: var(--w-text); border: 1px solid var(--w-line); }
+.cal-g.st-ok span { color: var(--w-accent); }
+.cal-g.st-needs-auth, .cal-g.st-offline { opacity: .75; }
+.cal-g.st-error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+.cal-g-spin { position: absolute; inset: 3px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--w-accent); animation: cal-spin .8s linear infinite; }
+@keyframes cal-spin { to { transform: rotate(360deg); } }
+.cal-gnote { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; padding: 5px 9px; border-radius: 9px; font-size: .74rem; color: var(--w-text); background: var(--w-fill); }
+.cal-gnote.st-error { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.gcal-box { display: flex; flex-direction: column; gap: 12px; }
+.gcal-state { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--c-fill); font-size: .86rem; }
+.gcal-state span { color: var(--c-muted); font-size: .78rem; }
+.gcal-state p { margin-top: 4px; font-size: .82rem; }
+.gcal-state.st-ok { background: color-mix(in srgb, var(--success) 12%, transparent); }
+.gcal-state.st-error { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.gcal-cals { border: 1px solid var(--c-line); border-radius: 12px; padding: 8px 12px; margin: 0; }
+.gcal-cals legend { font-size: .76rem; font-weight: 700; color: var(--c-muted); padding: 0 4px; }
+.gcal-dot, .gcal-cal i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.gcal-adv summary { cursor: pointer; font-size: .82rem; font-weight: 650; }
+.gcal-adv > * + * { margin-top: 8px; }
+.gcal-adv .input { flex: 1 1 260px; }
+.gcal-when, .gcal-cal, .gcal-loc { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.gcal-desc { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .86rem; color: var(--c-muted); margin-bottom: 10px; max-height: 40vh; overflow: auto; }

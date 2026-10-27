@@ -1,0 +1,93 @@
+/* Tester — sidebar (profile, Home / Quiz / custom tabs) and the space it takes from the app. */
+:root { --nav-w: 248px; --nav-rail: 66px; }
+body.has-nav .app { width: auto; max-width: 1600px; margin: 0 24px 0 calc(var(--nav-w) + 32px); }
+body.has-nav.nav-collapsed .app { margin-left: calc(var(--nav-rail) + 32px); }
+@media (min-width: 1900px) { body.has-nav .app { margin-left: max(calc(var(--nav-w) + 32px), calc((100vw - 1600px + var(--nav-w)) / 2)); } }
+
+.nav-side {
+  position: fixed; inset: 16px auto 16px 16px; z-index: 70; width: var(--nav-w); display: flex;
+  color: var(--ui-text); background: var(--chrome-bg); border: 1px solid var(--chrome-line); border-radius: 22px;
+  -webkit-backdrop-filter: blur(28px) saturate(160%); backdrop-filter: blur(28px) saturate(160%); box-shadow: 0 12px 40px -18px rgba(18,42,67,.35);
+  --c-text: var(--page-text); --c-muted: var(--page-muted); --c-fill: color-mix(in srgb, var(--page-text) 8%, transparent); --c-fill-2: color-mix(in srgb, var(--page-text) 13%, transparent); --c-line: var(--chrome-line);
+  color: var(--page-text); transition: width .22s var(--ease), transform .26s var(--ease);
+}
+html.perf .nav-side { -webkit-backdrop-filter: none; backdrop-filter: none; background: color-mix(in srgb, var(--chrome-bg) 35%, var(--ui-bg)); }
+body.nav-resizing, body.nav-resizing * { cursor: ew-resize !important; user-select: none; }
+body.nav-resizing .nav-side { transition: none; }
+.nav-inner { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; border-radius: inherit; padding-bottom: 12px; scrollbar-width: thin; }
+
+/* Profile */
+.nav-profile { position: relative; display: flex; flex-direction: column; padding: 0 0 6px; }
+.nav-banner { height: 78px; border-radius: 21px 21px 0 0; }
+.nav-avatar { margin: -34px 0 8px 16px; align-self: flex-start; border-radius: 50%; }
+.nav-who { display: flex; flex-direction: column; gap: 2px; padding: 0 18px 6px; min-width: 0; overflow-wrap: anywhere; }
+.nav-who b { font-family: var(--font-display); font-size: 1.02rem; letter-spacing: -.01em; }
+.nav-who span { font-size: .76rem; color: var(--page-muted); line-height: 1.4; }
+
+/* Destinations */
+.nav-main { padding: 8px 10px 0; display: flex; flex-direction: column; gap: 6px; }
+.nav-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.nav-row { position: relative; display: flex; align-items: center; border-radius: 12px; }
+.nav-item { position: relative; display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 9px 38px 9px 10px; border-radius: 12px; text-align: left; font-size: .87rem; font-weight: 600; color: var(--page-text); touch-action: pan-y; }
+.nav-item:hover { background: var(--c-fill); }
+.nav-item > svg, .nav-emoji { flex: 0 0 auto; color: var(--accent); }
+.nav-emoji { width: 18px; text-align: center; font-size: 1rem; line-height: 1; }
+.nav-label { min-width: 0; flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-item[aria-current="page"] { background: var(--accent-soft); color: var(--page-text); font-weight: 750; box-shadow: inset 3px 0 0 var(--accent); }
+.nav-grip { position: absolute; left: -2px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 12px; color: var(--page-muted); opacity: 0; cursor: grab; }
+@media (pointer: fine) { .nav-row:hover .nav-grip { opacity: .6; } }
+.nav-badge { flex: 0 0 auto; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 99px; display: inline-grid; place-items: center; font-size: .7rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent-ink); background: var(--accent); }
+.nav-lock { flex: 0 0 auto; color: var(--page-muted); opacity: .7; display: inline-grid; }
+.nav-more { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); opacity: 0; color: var(--page-muted); }
+.nav-row:hover .nav-more, .nav-row:focus-within .nav-more, .nav-more[aria-expanded="true"] { opacity: 1; }
+@media (hover: none) { .nav-more { opacity: .7; } }
+.nav-row.dragging { opacity: .85; background: var(--c-fill-2); box-shadow: 0 8px 22px -10px rgba(0,0,0,.4); }
+.nav-list.reordering .nav-item { cursor: grabbing; }
+.nav-add { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px; border-radius: 12px; border: 1.5px dashed color-mix(in srgb, var(--page-text) 22%, transparent); color: var(--page-muted); font-size: .84rem; font-weight: 650; }
+.nav-add:hover { color: var(--page-text); border-color: var(--accent); background: var(--accent-soft); }
+.nav-add svg { color: var(--accent); }
+.nav-foot { margin-top: auto; padding: 18px 10px 0; display: flex; flex-direction: column; gap: 2px; }
+.nav-plain { padding-right: 10px; }
+.nav-saved { display: block; font-size: .66rem; color: var(--page-muted); padding: 6px 12px 0; }
+
+/* Collapse button & resize handle */
+.nav-collapse { position: absolute; right: -14px; top: 92px; width: 28px; height: 34px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--ui-line); background: var(--ui-bg); color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.1); z-index: 2; }
+.nav-resize { position: absolute; top: 14px; bottom: 14px; right: -5px; width: 8px; cursor: ew-resize; touch-action: none; border-radius: 6px; }
+.nav-resize:hover, .nav-resize:focus-visible { background: var(--accent-soft); outline-offset: 0; }
+
+/* Collapsed: an icon rail that still navigates */
+body.nav-collapsed .nav-side { width: var(--nav-rail); }
+body.nav-collapsed .nav-resize, body.nav-collapsed .nav-who, body.nav-collapsed .nav-banner, body.nav-collapsed .nav-saved, body.nav-collapsed .nav-label, body.nav-collapsed .nav-more, body.nav-collapsed .nav-lock, body.nav-collapsed .nav-add span, body.nav-collapsed .nav-grip { display: none; }
+body.nav-collapsed .nav-avatar { margin: 12px auto 4px; }
+body.nav-collapsed .nav-avatar .sp-avatar { width: 40px !important; height: 40px !important; padding: 3px; }
+body.nav-collapsed .nav-avatar .sp-avatar > span { font-size: 1rem; }
+body.nav-collapsed .nav-main { padding: 8px 8px 0; }
+body.nav-collapsed .nav-item, body.nav-collapsed .nav-add { justify-content: center; padding: 10px 0; }
+body.nav-collapsed .nav-badge { position: absolute; top: 2px; right: 2px; min-width: 18px; height: 16px; font-size: .62rem; padding: 0 4px; }
+body.nav-collapsed .nav-collapse { top: 66px; }
+
+/* Icon picker in the tab dialog */
+.nav-icon-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.nav-icon-pick { display: grid; place-items: center; aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--c-line); color: var(--c-muted); background: var(--c-fill); }
+.nav-icon-pick:hover { color: var(--c-text); }
+.nav-icon-pick.on { color: var(--c-accent); border-color: var(--c-accent); background: var(--c-accent-soft); box-shadow: 0 0 0 1px var(--c-accent); }
+
+/* Phones: the sidebar becomes a drawer opened from the top bar */
+.nav-menu-btn { display: none; }
+.nav-scrim { display: none; }
+@media (max-width: 700px) {
+  body.has-nav .app, body.has-nav.nav-collapsed .app { width: calc(100% - 24px); margin: 0 auto; }
+  .nav-menu-btn { display: inline-flex; }
+  .nav-side { inset: 0 auto 0 0; width: min(300px, 86vw); border-radius: 0 22px 22px 0; transform: translateX(-104%); background: var(--ui-bg); color: var(--ui-text); --c-text: var(--ui-text); --c-muted: var(--ui-muted); --c-fill: var(--ui-fill); --c-fill-2: var(--ui-fill-2); --c-line: var(--ui-line); z-index: 95; visibility: hidden; }
+  .nav-side .nav-item, .nav-side .nav-add { color: var(--ui-text); }
+  .nav-side .nav-who span, .nav-side .nav-saved, .nav-side .nav-more { color: var(--ui-muted); }
+  .nav-banner { border-radius: 0 21px 0 0; }
+  body.nav-drawer-open .nav-side { transform: none; visibility: visible; box-shadow: 0 0 60px rgba(0,0,0,.35); }
+  body.nav-drawer-open .nav-scrim { display: block; position: fixed; inset: 0; z-index: 94; background: rgba(8,10,16,.38); }
+  .nav-collapse, .nav-resize { display: none; }
+  .nav-more { opacity: .75; }
+}
+@media (max-width: 420px) { body.has-nav .app, body.has-nav.nav-collapsed .app { width: calc(100% - 16px); } }
+
+/* The dashboard-only top bar buttons don't apply to the Quiz view */
+html[data-view="quiz"] #editBtn { display: none; }
