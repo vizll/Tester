@@ -534,6 +534,20 @@ test('cleanup: repeated navigation and game switching leave no extra listeners o
   } finally { await context.close(); }
 }, { own: true, timeout: 90000 });
 
+test('chess: checkmating the bot counts one win, once (also after reload)', async ({ page }) => {
+  await page.evaluate(() => { const d = SS.play.data('chess'); d.game = { id: 'm1', history: ['e4', 'e5', 'Bc4', 'Nc6', 'Qh5', 'Nf6'], won: false, winCounted: false }; SS.play.setGame('chess'); SS.play.state.actions.chess = 2; SS.play.save(); SS.quiz.open('practice'); });
+  await page.waitForSelector('.ss-chess-square[data-sq="h5"] .ss-chess-piece');
+  await page.click('.ss-chess-square[data-sq="h5"]'); await page.click('.ss-chess-square[data-sq="f7"]');
+  await page.waitForFunction(() => /you win/.test(document.querySelector('.ss-chess-status').textContent));
+  eq((await play(page)).wins.chess, 1, 'checkmate counted');
+  eq(await page.evaluate(() => SS.play.data('chess').game.history.slice(-1)[0]), 'Qxf7#', 'mate recorded');
+  await flush(page); await boot(page);
+  await page.evaluate(() => SS.quiz.open('practice'));
+  await page.waitForFunction(() => /you win/.test((document.querySelector('.ss-chess-status') || {}).textContent || ''));
+  eq((await play(page)).wins.chess, 1, 'restoring the finished board adds nothing');
+  eq((await play(page)).actions.chess, 1, 'only the mating move was spent');
+}, { timeout: 60000 });
+
 test('chess: inline promotion picker, saved position restored after reload', async ({ page }) => {
   await page.evaluate(() => { const d = SS.play.data('chess'); d.game = { id: 'p1', history: ['a4', 'b5', 'axb5', 'a6', 'bxa6', 'Bb7', 'axb7', 'Nc6'], won: false, winCounted: false }; SS.play.setGame('chess'); SS.play.state.actions.chess = 2; SS.play.save(); SS.quiz.open('practice'); });
   await page.waitForSelector('.ss-chess-square[data-sq="b7"] .ss-chess-piece.white');
