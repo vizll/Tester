@@ -14,7 +14,20 @@
   const ENGINE_LOAD_MS = 20000;
   const glyph = { w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' }, b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' } };
   const NAMES = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' };
-  const LEVELS = { beginner: { skill: 0, ms: 300, label: 'Beginner' }, intermediate: { skill: 7, ms: 700, label: 'Intermediate' }, professional: { skill: 14, ms: 1600, label: 'Professional' }, expert: { skill: 20, ms: 5000, label: 'Expert' } };
+  /* Easiest to hardest. Stockfish's Skill Level (0–20) plus how long it may think; Starter also stops after
+     looking one move ahead. The fallback bot below has its own, rougher spread for each level. */
+  const LEVELS = {
+    starter: { skill: 0, depth: 1, ms: 200, label: 'Starter', note: 'learning the moves', spread: 0.9 },
+    beginner: { skill: 0, ms: 300, label: 'Beginner', note: 'misses a lot', spread: 0.6 },
+    casual: { skill: 3, ms: 450, label: 'Casual', note: 'friendly games', spread: 0.45 },
+    intermediate: { skill: 7, ms: 700, label: 'Intermediate', note: 'knows the basics', spread: 0.25 },
+    club: { skill: 10, ms: 1000, label: 'Club', note: 'a solid club player', spread: 0.15 },
+    professional: { skill: 14, ms: 1600, label: 'Professional', note: 'punishes mistakes', spread: 0.08 },
+    master: { skill: 17, ms: 3000, label: 'Master', note: 'very strong', spread: 0.03 },
+    expert: { skill: 20, ms: 5000, label: 'Expert', note: 'full strength', spread: 0 },
+    grandmaster: { skill: 20, ms: 9000, label: 'Grandmaster', note: 'full strength, thinks longest', spread: 0 }
+  };
+  const CONTRAST = { soft: 'Soft glass', clear: 'Clear (default)', high: 'High contrast' };
   const FONTS = ['Georgia', 'Times New Roman', 'Palatino Linotype', 'Segoe UI Symbol', 'Arial', 'Verdana', 'Trebuchet MS', 'Courier New'];
   const FILES = 'abcdefgh';
   const svgBackground = (a, b, c) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${a}"/><stop offset=".5" stop-color="${b}"/><stop offset="1" stop-color="${c}"/></linearGradient><filter id="f"><feGaussianBlur stdDeviation="45"/></filter></defs><path fill="url(#g)" d="M0 0h800v800H0z"/><g opacity=".4" filter="url(#f)"><circle cx="170" cy="150" r="150" fill="${c}"/><circle cx="680" cy="600" r="220" fill="${a}"/></g><path d="M0 650Q220 330 450 490T800 210" fill="none" stroke="white" stroke-opacity=".2" stroke-width="80"/></svg>`);
@@ -24,7 +37,7 @@
     nebula: { label: 'Nebula', url: svgBackground('#9c87b4', '#b6b7e8', '#f6d4db') },
     sunset: { label: 'Sunset', url: svgBackground('#f6d9a8', '#e9b3a8', '#f8e9d1') }
   };
-  const DEFAULT_PREFS = { difficulty: 'intermediate', preset: 'ocean', pieces: 'classic', white: '#ffffff', black: '#172e44', font: 'Georgia', fog: 8, dark: '#16415c', image: '' };
+  const DEFAULT_PREFS = { difficulty: 'intermediate', preset: 'ocean', pieces: 'classic', white: '#ffffff', black: '#172e44', font: 'Georgia', fog: 8, dark: '#16415c', image: '', contrast: 'clear', coords: true, animate: true };
 
   /* Accepts the version 1 shape (flat fields) and the current { prefs, game } shape */
   function sanitize(data) {
@@ -37,6 +50,9 @@
       white: U.hex(raw.white, DEFAULT_PREFS.white), black: U.hex(raw.black, DEFAULT_PREFS.black), dark: U.hex(raw.dark, DEFAULT_PREFS.dark),
       font: typeof raw.font === 'string' && /^[\w\s-]{1,40}$/.test(raw.font) ? raw.font : DEFAULT_PREFS.font,
       fog: U.clampNum(raw.fog, 0, 20, 8),
+      contrast: CONTRAST[raw.contrast] ? raw.contrast : 'clear',
+      coords: raw.coords !== false,
+      animate: raw.animate !== false,
       image: typeof raw.image === 'string' && raw.image.length < 3e6 && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(raw.image) ? raw.image : ''
     };
     const g = flat ? data : data.game;
@@ -78,8 +94,8 @@
       current = req;
       post(`setoption name Skill Level value ${req.level.skill}`);
       post(`position fen ${req.fen}`);
-      post(`go movetime ${req.level.ms}`);
-      req.timer = setTimeout(() => fail('Stockfish stopped responding.'), req.level.ms + 15000);
+      post(req.level.depth ? `go depth ${req.level.depth}` : `go movetime ${req.level.ms}`);
+      req.timer = setTimeout(() => fail('Stockfish stopped responding.'), (req.level.ms || 1000) + 15000);
     }
     const api = {
       get state() { return state; },
@@ -141,7 +157,7 @@
       game.undo();
       return { m, score: score + Math.random() * 0.2 };
     }).sort((a, b) => b.score - a.score);
-    const spread = { beginner: 0.6, intermediate: 0.25, professional: 0.08, expert: 0 }[difficulty] ?? 0.25;
+    const spread = LEVELS[difficulty] ? LEVELS[difficulty].spread : 0.25;
     const pick = scored[Math.floor(Math.random() * Math.max(1, Math.round(scored.length * spread)))] || scored[0];
     return pick.m.from + pick.m.to + (pick.m.promotion || '');
   }
@@ -169,6 +185,15 @@
     img.src = url;
   }
 
+  /* destination square → origin square for a move (castling moves the rook as well) */
+  function slideOf(move) {
+    const out = { [move.to]: move.from }; const rank = move.from[1];
+    if (move.flags.includes('k')) out['f' + rank] = 'h' + rank;
+    if (move.flags.includes('q')) out['d' + rank] = 'a' + rank;
+    return out;
+  }
+  const levelChoices = () => Object.entries(LEVELS).map(([k, v], i) => [k, `${i + 1}. ${v.label} — ${v.note}`]);
+
   function statusOf(game) {
     if (game.isCheckmate()) return game.turn() === 'b' ? { over: true, text: 'Checkmate — you win! 🏆', win: true } : { over: true, text: 'Checkmate — the bot wins. Start a new game when you’re ready.' };
     if (game.isStalemate()) return { over: true, text: 'Stalemate — it’s a draw.' };
@@ -179,14 +204,17 @@
   }
 
   P.register('chess', {
-    title: 'Chess', icon: '♟', description: 'Play White against a local Stockfish bot at four levels.',
+    title: 'Chess', icon: '♟', description: 'Play White against a local Stockfish bot — nine levels from Starter to Grandmaster.',
     rules: 'Each legal move you make uses one move; the bot’s reply is free. Selecting pieces and illegal moves are free.',
     sanitize,
     settings(id = 'chess') {
       const p = P.data(id).prefs || DEFAULT_PREFS; const set = (k, v) => K.setPref(id, k, v);
       const upload = el('input', { type: 'file', accept: 'image/*', aria: { label: 'Upload your own chess board background' }, on: { change: e => { cropImage(e.target.files[0], image => { const d = P.data(id); d.prefs = { ...d.prefs, image }; P.changed({ type: 'prefs', game: id, key: 'image' }); }); e.target.value = ''; } } });
       return [
-        K.field('Bot difficulty', K.select('Chess bot difficulty', Object.entries(LEVELS).map(([k, v]) => [k, `${v.label} · skill ${v.skill}/20`]), p.difficulty, v => set('difficulty', v)), 'Applies from the bot’s next move.'),
+        K.field('Bot difficulty', K.select('Chess bot difficulty', levelChoices(), p.difficulty, v => set('difficulty', v)), 'Applies from the bot’s next move.'),
+        K.field('Square contrast', K.select('Chess square contrast', Object.entries(CONTRAST), CONTRAST[p.contrast] ? p.contrast : 'clear', v => set('contrast', v)), 'Higher contrast makes the squares easier to tell apart.'),
+        K.field('Coordinates', K.toggle('Show chess board coordinates', p.coords !== false, v => set('coords', v))),
+        K.field('Animate moves', K.toggle('Slide chess pieces when they move', p.animate !== false, v => set('animate', v))),
         K.field('Board background', K.select('Chess board background', Object.entries(PRESETS).map(([k, v]) => [k, v.label]), p.preset, v => { const d = P.data(id); d.prefs = { ...d.prefs, preset: v, image: '' }; P.changed({ type: 'prefs', game: id, key: 'preset' }); })),
         K.field('Piece style', K.select('Chess piece style', [['classic', 'Classic outline'], ['solid', 'Solid silhouettes'], ['letters', 'Minimal letters']], p.pieces, v => set('pieces', v))),
         K.field('Piece font', K.select('Chess piece font', FONTS.map(f => [f, f]), FONTS.includes(p.font) ? p.font : 'Georgia', v => set('font', v))),
@@ -203,13 +231,15 @@
       const data = P.data('chess');
       Object.assign(data, sanitize(data));
       const preview = !!opts.preview;
-      let game = null, selected = null, cursor = 'e2', promo = null, thinking = false, destroyed = false, note = '', lastMove = null, usingFallback = false;
+      let game = null, selected = null, cursor = 'e2', promo = null, thinking = false, destroyed = false, note = '', lastMove = null, usingFallback = false, slide = null;
       const engine = preview ? null : createEngine(() => { if (!destroyed) { paintStatus(); maybeBot(); } });
       const status = el('p.ag-status.ss-chess-status', { attrs: { 'aria-live': 'polite' } });
       const detail = el('div.ag-score');
       const board = el('div.ss-chess-board', { role: 'group', aria: { label: 'Chess board. You play White. Arrow keys move between squares; Enter or Space selects.' } });
       const promoBox = el('div.ss-chess-promo', { hidden: true, role: 'dialog', aria: { label: 'Choose a piece for promotion' } });
-      const history = el('div.ss-chess-history', { aria: { label: 'Move list' } });
+      const history = el('div.ss-chess-history', { tabIndex: preview ? -1 : 0, aria: { label: 'Move list' } });
+      const level = preview ? null : K.select('Bot level', Object.entries(LEVELS).map(([k, v]) => [k, v.label]), data.prefs.difficulty, v => K.setPref('chess', 'difficulty', v));
+      if (level) { level.classList.add('ss-chess-level'); level.title = 'Bot level — applies from its next move'; }
       const retry = el('button.btn.btn-sm', { type: 'button', hidden: true, on: { click: () => { usingFallback = false; note = ''; engine.start(); } } }, 'Retry Stockfish');
       const newGame = el('button.btn.btn-sm', { type: 'button', on: { click: async () => {
         if (!game) return;
@@ -222,12 +252,12 @@
         P.changed({ type: 'board', game: 'chess' });
         paint();
       } } }, 'New game');
+      // slim chrome around the board: one row of chips + level, one status line, one bar under the board
       const root = el('div.ag-game.ss-chess', { class: preview ? 'ag-preview' : '' },
-        el('div.ag-top', detail, status),
+        el('div.ag-top', el('div.ss-chess-toprow', detail, level ? el('label.ss-chess-levelwrap', el('span', { text: 'Bot' }), level) : null), status),
         el('div.ag-stage.ss-chess-stage', el('div.ss-chess-wrap', board, promoBox)),
-        preview ? null : el('div.ag-controls', newGame, retry),
-        preview ? null : history,
-        preview ? null : el('details.hint.ss-chess-credits', el('summary', { text: 'Chess engine & licences' }), el('p', 'Stockfish 19 runs locally in your browser. ', el('a', { href: 'vendor/STOCKFISH-LICENSE.txt', target: '_blank', rel: 'noopener', text: 'Stockfish licence (GPLv3)' }), ' · ', el('a', { href: 'vendor/STOCKFISH-SOURCE.tar.gz', text: 'Corresponding source' }), ' · ', el('a', { href: 'vendor/CHESS-LICENSE.txt', target: '_blank', rel: 'noopener', text: 'chess.js licence (BSD)' }))));
+        preview ? null : el('div.ss-chess-bar', newGame, retry, history,
+          el('details.ss-chess-credits', el('summary', { text: 'Licences', title: 'Chess engine & licences' }), el('p', 'Stockfish 19 runs locally in your browser. ', el('a', { href: 'vendor/STOCKFISH-LICENSE.txt', target: '_blank', rel: 'noopener', text: 'Stockfish licence (GPLv3)' }), ' · ', el('a', { href: 'vendor/STOCKFISH-SOURCE.tar.gz', text: 'Corresponding source' }), ' · ', el('a', { href: 'vendor/CHESS-LICENSE.txt', target: '_blank', rel: 'noopener', text: 'chess.js licence (BSD)' })))));
       host.replaceChildren(root);
       board.append(el('p.ss-chess-loading', { text: 'Loading chess rules…' }));
 
@@ -238,6 +268,10 @@
         board.style.backgroundImage = `url("${p.image || PRESETS[p.preset].url}")`;
         ['white', 'black', 'dark'].forEach(k => board.style.setProperty(`--chess-${k}`, p[k]));
         board.style.setProperty('--chess-font', `"${p.font}"`); board.style.setProperty('--chess-fog', `${p.fog}px`);
+        board.dataset.contrast = p.contrast; board.classList.toggle('no-coords', !p.coords);
+        if (level) level.value = p.difficulty;
+        // the move just made slides from its old square (and the rook too when castling)
+        const glide = slide && p.animate && !U.reducedMotion() ? slide : null; slide = null;
         const hadFocus = board.contains(document.activeElement);
         const targets = selected ? game.moves({ square: selected, verbose: true }) : [];
         const st = statusOf(game);
@@ -250,16 +284,21 @@
           const last = lastMove && (lastMove.from === square || lastMove.to === square);
           const label = `${square}${piece ? `, ${piece.color === 'w' ? 'white' : 'black'} ${NAMES[piece.type]}` : ', empty'}${selected === square ? ', selected' : ''}${move ? (move.captured ? ', capture available' : ', legal move') : ''}`;
           const b = el('button.ss-chess-square', { type: 'button', tabIndex: !preview && square === cursor ? 0 : -1, dataset: { sq: square }, class: [light ? 'light' : 'dark', selected === square ? 'selected' : '', move ? (move.captured ? 'capture' : 'legal') : '', last ? 'last' : '', square === kingInCheck ? 'check' : ''].join(' '), aria: { label, pressed: String(selected === square) }, on: { click: () => clickSquare(square), focus: () => { cursor = square; } } });
-          if (piece) b.append(el('span.ss-chess-piece', { class: piece.color === 'w' ? 'white' : 'black', text: p.pieces === 'letters' ? (piece.color === 'w' ? piece.type.toUpperCase() : piece.type) : p.pieces === 'solid' ? glyph.b[piece.type] : glyph[piece.color][piece.type], aria: { hidden: 'true' } }));
+          if (piece) {
+            const from = glide && glide[square];
+            const span = el('span.ss-chess-piece', { class: (piece.color === 'w' ? 'white' : 'black') + (from ? ' moved' : ''), text: p.pieces === 'letters' ? (piece.color === 'w' ? piece.type.toUpperCase() : piece.type) : p.pieces === 'solid' ? glyph.b[piece.type] : glyph[piece.color][piece.type], aria: { hidden: 'true' } });
+            if (from) { span.style.setProperty('--dx', `${(FILES.indexOf(from[0]) - col) * 100}%`); span.style.setProperty('--dy', `${(8 - Number(from[1]) - row) * 100}%`); b.classList.add('arrive'); }
+            b.append(span);
+          }
           if (col === 0) b.append(el('small.ss-chess-rank', { text: String(8 - row), aria: { hidden: 'true' } }));
           if (row === 7) b.append(el('small.ss-chess-file', { text: FILES[col], aria: { hidden: 'true' } }));
           board.append(b);
         }));
         if (hadFocus && !promo) board.querySelector(`[data-sq="${cursor}"]`)?.focus({ preventScroll: true });
         const n = game.history().length;
-        detail.replaceChildren(el('span', { text: `${LEVELS[p.difficulty].label} bot${usingFallback ? ' (simple)' : ''}` }), el('span', { text: n ? `Move ${Math.floor(n / 2) + 1}` : 'White to move' }), el('span', { text: `${game.history({ verbose: true }).filter(m => m.color === 'w' && m.captured).length} captures` }));
+        detail.replaceChildren(...[level ? null : el('span', { text: `${LEVELS[p.difficulty].label} bot` }), usingFallback ? el('span', { text: 'Simple bot', title: 'Stockfish isn’t available, so a simple built-in bot is playing' }) : null, el('span', { text: n ? `Move ${Math.floor(n / 2) + 1}` : 'White to move' }), el('span', { text: `${game.history({ verbose: true }).filter(m => m.color === 'w' && m.captured).length} captures` })].filter(Boolean));
         history.textContent = game.history().map((m, i) => (i % 2 === 0 ? `${Math.floor(i / 2) + 1}. ` : '') + m).join('  ') || 'Your moves will appear here.';
-        history.scrollTop = history.scrollHeight;
+        history.scrollLeft = history.scrollWidth;
         paintStatus();
       }
       function paintStatus() {
@@ -307,7 +346,7 @@
         let move;
         try { move = game.move({ from, to, ...(promotion ? { promotion } : {}) }); } catch (_) { move = null; }
         if (!move) { note = 'That move isn’t legal. No move used.'; selected = null; paint(); return; }
-        lastMove = move; selected = null; note = ''; cursor = to;
+        lastMove = move; slide = slideOf(move); selected = null; note = ''; cursor = to;
         persist();
         if (statusOf(game).win) P.win('chess', data.game);
         P.spend('chess');   // saves the position, the move count and any win together
@@ -330,7 +369,7 @@
         let move = null;
         try { move = game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), ...(uci.length > 4 ? { promotion: uci[4] } : {}) }); } catch (_) { move = null; }
         if (!move) { const alt = fallbackMove(fen, data.prefs.difficulty); try { move = alt && game.move({ from: alt.slice(0, 2), to: alt.slice(2, 4), ...(alt.length > 4 ? { promotion: alt[4] } : {}) }); } catch (_) { move = null; } }
-        if (move) { lastMove = move; persist(); P.changed({ type: 'board', game: 'chess' }); }
+        if (move) { lastMove = move; slide = slideOf(move); persist(); P.changed({ type: 'board', game: 'chess' }); }
         paint();
       }
       function onKeys(e) {
@@ -372,5 +411,5 @@
       };
     }
   });
-  SS.chessTest = { fallbackMove, statusOf, sanitize, createEngine };
+  SS.chessTest = { fallbackMove, statusOf, sanitize, createEngine, LEVELS };
 })(window.SS);

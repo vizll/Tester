@@ -16,6 +16,8 @@
   const DIRECTIONS = [{ value: 'def', label: 'Show the term → answer with the definition' }, { value: 'term', label: 'Show the definition → answer with the term' }];
   const sets = () => SS.data.all('quizzes');
   const btn = (text, fn, cls = '', extra = {}) => el('button.btn', { type: 'button', class: cls, on: { click: fn }, ...extra }, text);
+  /* restart a CSS animation class on a node (animations are off when the app's reduce-motion setting is on) */
+  const replay = (node, cls) => { if (!node) return; node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); };
 
   /* ---------------- Grading ---------------- */
   /* Small typos may count; a changed number, sign or negation never does. Strict mode ignores only case and spacing. */
@@ -86,6 +88,15 @@
     SS.ui.toast(format === 'csv' ? 'Exported as CSV (term, definition)' : 'Exported as tab-separated text — the format Quizlet’s “Import” accepts', { kind: 'success' });
   }
 
+  /* "0%" counting up to the score */
+  function countUp(node, to) {
+    if (!node) return;
+    if (U.reducedMotion() || to <= 0) { node.textContent = `${to}%`; return; }
+    const t0 = performance.now(), dur = 900;
+    const step = now => { if (!node.isConnected) return; const k = Math.min(1, (now - t0) / dur); node.textContent = `${Math.round(to * (1 - Math.pow(1 - k, 3)))}%`; if (k < 1) requestAnimationFrame(step); };
+    node.textContent = '0%'; requestAnimationFrame(step);
+  }
+
   /* ---------------- Sessions ---------------- */
   function buildQuestions(cards, all, options) {
     const dir = options.direction;
@@ -154,7 +165,13 @@
     host.replaceChildren(root);
     let current = null, view = null;
     const tabBtns = SECTIONS.map(s => el('button.qz-tab', { type: 'button', role: 'tab', id: `qz-tab-${s.id}`, aria: { controls: 'qz-panel' }, dataset: { id: s.id }, on: { click: () => show(s.id) } }, SS.icon(s.icon, 16), el('span', { text: s.label })));
-    tabs.append(...tabBtns);
+    // the highlight behind the selected tab glides between tabs
+    const ink = el('span.qz-tab-ink', { aria: { hidden: 'true' } });
+    tabs.append(ink, ...tabBtns);
+    const moveInk = () => { const b = tabBtns.find(x => x.classList.contains('on')); if (!b || !b.offsetWidth) return; ink.style.width = `${b.offsetWidth}px`; ink.style.transform = `translateX(${b.offsetLeft}px)`; tabs.classList.add('has-ink'); };
+    const inkRo = new ResizeObserver(U.raf(moveInk)); inkRo.observe(tabs);
+    offs.push(() => inkRo.disconnect());
+    requestAnimationFrame(() => requestAnimationFrame(() => tabs.classList.add('ink-ready')));
     tabs.addEventListener('keydown', e => {
       const i = tabBtns.indexOf(document.activeElement); if (i < 0) return;
       const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabBtns.length - 1 }[e.key]; if (j == null) return;
@@ -173,12 +190,18 @@
       if (!SECTIONS.some(s => s.id === id)) id = 'sets';
       section = id;
       tabBtns.forEach(b => { const on = b.dataset.id === id; b.setAttribute('aria-selected', String(on)); b.tabIndex = on ? 0 : -1; b.classList.toggle('on', on); });
+      moveInk();
       body.setAttribute('aria-labelledby', `qz-tab-${id}`);
       if (current === id && view && view.update) { view.update(opts); return; }
       if (view) view.destroy();
+      // the new section slides in from the side of the tab it came from
+      const from = SECTIONS.findIndex(x => x.id === current), to = SECTIONS.findIndex(x => x.id === id);
+      body.style.setProperty('--qz-dx', from < 0 ? '0px' : `${Math.sign(to - from) * 26}px`);
+      body.style.setProperty('--qz-dy', from < 0 ? '12px' : '0px');
       current = id;
       root.dataset.section = id;
       view = ({ sets: setsView, practice: practiceView, games: gamesView, settings: settingsView })[id](body, opts);
+      replay(body, 'qz-enter');
     }
     return {
       show,
@@ -220,11 +243,8 @@
       list.forEach((set, i) => {
         const subj = SS.data.subject(set.subjectId);
         const usable = valid(set.cards).length;
-        grid.append(el('article.qz-set', { role: 'listitem', style: { '--k': subj ? subj.color : U.SUBJECT_COLORS[i % U.SUBJECT_COLORS.length] } },
-          el('div.qz-set-main', el('h3', { text: set.title }), el('p.qz-set-meta', subj ? SS.ui.subjectChip(set.subjectId) : null, el('span', { text: U.plural(set.cards.length, 'card') }))),
-          el('div.qz-set-actions',
-            btn('Flashcards', () => C.study(set.id), 'btn-sm', { disabled: !usable }),
-            btn('Quiz & play', () => Q.practice(set.id), 'btn-sm btn-primary', { disabled: !usable, title: usable ? '' : 'Add cards with both a term and a definition first' }),
+        grid.append(el('article.qz-set', { role: 'listitem', style: { '--k': subj ? subj.color : U.SUBJECT_COLORS[i % U.SUBJECT_COLORS.length], '--i': String(Math.min(i, 12)) } },
+          el('div.qz-set-main', el('div.qz-set-top', el('h3', { text: set.title }), el('div.qz-set-tools',
             SS.ui.iconBtn('edit', `Edit ${set.title}`, () => editSet(set.id), 'sm'),
             el('button.icon-btn.sm', { type: 'button', title: 'More', aria: { label: `More options for ${set.title}`, haspopup: 'menu' }, on: { click: e => SS.ui.menu([
               { heading: set.title },
@@ -233,7 +253,11 @@
               { label: 'Export as CSV', icon: 'download', disabled: !set.cards.length, onClick: () => exportSet(set, 'csv') },
               '-',
               { label: 'Delete set…', icon: 'trash', danger: true, onClick: () => removeSet(set.id) }
-            ], { anchor: e.currentTarget, label: `${set.title} options` }) } }, SS.icon('more', 16)))));
+            ], { anchor: e.currentTarget, label: `${set.title} options` }) } }, SS.icon('more', 16)))),
+            el('p.qz-set-meta', subj ? SS.ui.subjectChip(set.subjectId) : null, el('span', { text: U.plural(set.cards.length, 'card') }))),
+          el('div.qz-set-actions',
+            btn('Flashcards', () => C.study(set.id), 'btn-sm', { disabled: !usable }),
+            btn('Quiz & play', () => Q.practice(set.id), 'btn-sm btn-primary', { disabled: !usable, title: usable ? '' : 'Add cards with both a term and a definition first' }))));
       });
     }
     fillSubjects(); draw();
@@ -398,6 +422,7 @@
       left.hidden = narrow && visible && s.panel.pane === 'game';
       panel.el.hidden = !visible || (narrow && s.panel.pane !== 'game');
       divider.hidden = narrow || !visible;
+      panel.paintExpand(narrow);
       paintGateBits();
     }
     const ro = new ResizeObserver(U.raf(() => { const w = split.clientWidth; if (!w) return; const was = narrow; narrow = w < NARROW; if (was !== narrow) layout(); }));
@@ -421,20 +446,29 @@
 
     /* ---- left side: setup, question or results ---- */
     let gateEls = [];
-    function paintGateBits() {
+    function paintGateBits(evt) {
       const g = P.progress(); const id = P.game(); const moves = P.actions(id);
       gateEls = gateEls.filter(n => n.isConnected);
-      gateEls.forEach(n => n.update && n.update(g, id, moves));
+      gateEls.forEach(n => n.update && n.update(g, id, moves, evt));
       switcher.querySelector('[data-value="game"] span') && (switcher.querySelector('[data-value="game"] span').textContent = moves ? `Game · ${moves}` : 'Game');
     }
+    const g0 = () => P.progress();
     function gateMeter() {
       const node = el('div.qz-meter', { role: 'status', aria: { live: 'polite' } });
       const showBtn = el('button.btn.btn-sm.qz-show-game', { type: 'button', on: { click: () => { s.panel.visible = true; P.save(); layout(); panel.focusGame(); } } });
-      node.update = (g, id, moves) => {
+      let shown = g0().have;
+      node.update = (g, id, moves, evt) => {
+        const answered = evt && evt.type === 'answer' && evt.counted;
+        // a newly earned dot pops in; when moves unlock, every dot flashes and "+3 moves" floats up
+        const fresh = answered && !evt.granted && g.have > shown ? g.have - 1 : -1;
+        const burst = answered && evt.granted;
         node.replaceChildren(
-          el('span.qz-meter-dots', { aria: { hidden: 'true' } }, Array.from({ length: Math.min(g.need, 10) }, (_, i) => el('i', { class: i < g.have ? 'on' : '' }))),
+          el('span.qz-meter-dots', { aria: { hidden: 'true' } }, Array.from({ length: Math.min(g.need, 10) }, (_, i) => el('i', { class: burst ? 'on burst' : i < g.have ? (i === fresh ? 'on pop' : 'on') : '', style: { '--i': String(i) } }))),
           el('span.qz-meter-text', el('b', { text: `${g.have} of ${g.need} correct` }), el('span', { text: ` · ${moves ? U.plural(moves, 'move') : 'no moves'} available in ${P.title(id)}` })),
+          burst ? el('span.qz-meter-gain', { text: `+${U.plural(evt.granted, 'move')}`, aria: { hidden: 'true' } }) : '',
           s.panel.visible ? '' : showBtn);
+        if (burst) { replay(node, 'qz-unlocked'); setTimeout(() => { if (node.isConnected) node.querySelectorAll('.qz-meter-dots i.burst').forEach(d => { d.className = ''; }); }, 1400); }
+        shown = g.have;
         showBtn.textContent = moves ? `Show game · ${U.plural(moves, 'move')}` : 'Show game';
       };
       node.update(P.progress(), P.game(), P.actions());
@@ -493,7 +527,10 @@
       const head = el('div.qz-qhead',
         el('div', el('p.eyebrow', { text: sess.retry ? `Retry · ${sess.setTitle}` : sess.setTitle }), el('h2', { text: `Question ${sess.index + 1} of ${n}` })),
         gateMeter());
-      const progress = el('div.progress-track', { role: 'progressbar', aria: { valuemin: 0, valuemax: n, valuenow: sess.index, label: 'Quiz progress' } }, el('div.progress-bar', { style: { width: `${(sess.index / n) * 100}%` } }));
+      // the bar grows from the previous question's position
+      const bar = el('div.progress-bar', { style: { width: `${(Math.max(0, sess.index - 1) / n) * 100}%` } });
+      const progress = el('div.progress-track.qz-progress', { role: 'progressbar', aria: { valuemin: 0, valuemax: n, valuenow: sess.index, label: 'Quiz progress' } }, bar);
+      requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = `${(sess.index / n) * 100}%`; }));
       const score = el('p.qz-score', { text: `${right} correct so far` });
       const card = el('div.qz-question', el('p.qz-kicker', { text: q.mode === 'tf' ? 'Do these match?' : sess.options.direction === 'term' ? 'Recall the term' : 'Recall the definition' }), el('h3.qz-prompt', { text: q.prompt }));
       if (q.mode === 'tf') card.append(el('div.qz-statement', el('span.qz-kicker', { text: sess.options.direction === 'term' ? 'Term shown' : 'Definition shown' }), el('p', { text: q.shown })));
@@ -511,7 +548,7 @@
       } else {
         const choices = q.mode === 'tf' ? [{ value: true, label: 'True' }, { value: false, label: 'False' }] : q.choices.map(t => ({ value: t, label: t }));
         choices.forEach((c, i) => {
-          const b = el('button.qz-option', { type: 'button', role: 'radio', aria: { checked: String(q.user === c.value) }, dataset: { i: String(i) }, on: { click: () => { if (q.checked) return; q.user = c.value; options.forEach(o => o.setAttribute('aria-checked', String(o === b))); saveSoon(); feedback.replaceChildren(); } } },
+          const b = el('button.qz-option', { type: 'button', role: 'radio', aria: { checked: String(q.user === c.value) }, dataset: { i: String(i) }, on: { click: () => { if (q.checked) return; q.user = c.value; options.forEach(o => o.setAttribute('aria-checked', String(o === b))); replay(b, 'pick'); saveSoon(); feedback.replaceChildren(); } } },
             el('span.qz-key', { text: q.mode === 'tf' ? (c.value ? 'T' : 'F') : String(i + 1), aria: { hidden: 'true' } }), el('span', { text: c.label }));
           options.push(b); answers.append(b);
         });
@@ -524,6 +561,8 @@
       const foot = el('div.qz-qfoot', btn('End quiz', endQuiz, 'btn-ghost btn-sm'), el('span.grow'), checkBtn, nextBtn);
       left.append(head, progress, score, card, answers, feedback, foot,
         el('p.hint.qz-tip', { text: q.mode === 'written' ? 'Enter checks your answer, then Enter again goes on. Shift + Enter adds a line.' : q.mode === 'tf' ? 'Press T or F to choose, then check.' : 'Press 1–4 to choose, then check.' }));
+      [...left.children].forEach((child, i) => child.style.setProperty('--i', String(i)));
+      replay(left, 'qz-q-enter');
       // quick keys for choices — handled here so they never reach the game panel
       left.onkeydown = e => {
         if (q.checked || q.mode === 'written' || e.ctrlKey || e.metaKey || e.altKey || U.isTyping(e.target)) return;
@@ -531,13 +570,14 @@
         const idx = q.mode === 'tf' ? (k === 't' ? 0 : k === 'f' ? 1 : -1) : /^[1-9]$/.test(k) ? Number(k) - 1 : -1;
         if (idx >= 0 && options[idx]) { e.preventDefault(); options[idx].click(); options[idx].focus(); }
       };
-      function render() {
+      function render(justChecked = false) {
         if (!q.checked) return;
+        if (justChecked) { replay(card, q.ok ? 'qz-right' : 'qz-wrong'); replay(feedback, 'qz-pop'); if (input) replay(input, q.ok ? 'qz-right' : 'qz-wrong'); }
         [input, ...options].filter(Boolean).forEach(x => { x.disabled = true; });
         options.forEach(o => { const v = q.mode === 'tf' ? o.dataset.i === '0' : q.choices[Number(o.dataset.i)]; o.classList.toggle('is-right', q.mode === 'tf' ? v === q.isTrue : v === q.expected); o.classList.toggle('is-wrong', q.user === v && !q.ok); });
         feedback.className = `qz-feedback ${q.ok ? 'qz-correct' : 'qz-incorrect'}`;
         const expect = q.mode === 'tf' ? `${q.isTrue ? 'True' : 'False'} — “${q.prompt}” goes with “${q.expected}”.` : q.expected;
-        feedback.replaceChildren(el('strong', { text: q.ok ? (q.close ? '✓ Correct — close enough (check the spelling)' : '✓ Correct') : '✗ Not quite' }), el('p', el('span.hint', { text: q.mode === 'tf' ? 'Answer: ' : 'Expected answer: ' }), el('span', { text: expect })));
+        feedback.replaceChildren(el('span.qz-feedback-icon', { text: q.ok ? '✓' : '✗', aria: { hidden: 'true' } }), el('div', el('strong', { text: q.ok ? (q.close ? 'Correct — close enough (check the spelling)' : 'Correct') : 'Not quite' }), el('p', el('span.hint', { text: q.mode === 'tf' ? 'Answer: ' : 'Expected answer: ' }), el('span', { text: expect }))));
         checkBtn.hidden = true; nextBtn.hidden = false;
         score.textContent = `${sess.questions.filter(x => x.ok).length} correct so far`;
       }
@@ -550,7 +590,7 @@
         else { const g = gradeAnswer(q.user, q.expected, sess.options.strict); q.ok = g.ok; q.close = !!g.close; }
         q.checked = true;
         P.submit(`${sess.id}:${q.id}`, q.ok);   // counts once per question; saves the session with it
-        render();
+        render(true);
         nextBtn.focus();
       }
       function next() {
@@ -580,7 +620,9 @@
       const pct = total ? Math.round((right / total) * 100) : 0;
       left.replaceChildren(
         el('div.qz-qhead', el('div', el('p.eyebrow', { text: sess.setTitle }), el('h2', { tabIndex: -1, text: 'Results' })), gateMeter()),
-        el('div.qz-result', el('strong', { text: `${pct}%` }), el('span', { text: `${right} of ${total} correct` }), el('p.hint', { text: pct === 100 ? 'Perfect score.' : pct >= 80 ? 'Strong work — review the few you missed.' : pct >= 50 ? 'Getting there. Retry the missed ones to lock them in.' : 'Keep going: flip through the flashcards, then try again.' })),
+        el('div.qz-result', { class: pct === 100 ? 'perfect' : '' },
+          el('div.qz-ring', { style: { '--pct': String(pct) }, aria: { hidden: 'true' } }, el('strong.qz-ring-num', { text: `${pct}%` })),
+          el('div.qz-result-copy', el('b', { text: pct === 100 ? 'Perfect score!' : pct >= 80 ? 'Strong work' : pct >= 50 ? 'Getting there' : 'Keep going' }), el('span', { text: `${right} of ${total} correct · ${pct}%` }), el('p.hint', { text: pct === 100 ? 'Every answer right.' : pct >= 80 ? 'Review the few you missed.' : pct >= 50 ? 'Retry the missed ones to lock them in.' : 'Flip through the flashcards, then try again.' }))),
         el('div.row-gap.qz-actions',
           missed.length ? btn(`Retry ${missed.length} missed`, () => { const set = SS.data.get('quizzes', sess.setId) || { id: sess.setId, title: sess.setTitle, cards: sess.questions.map(q => ({ term: q.term, def: q.def })) }; s.session = newSession(set, { ...sess.options, limit: missed.length }, missed.map(q => ({ term: q.term, def: q.def }))); s.session.setTitle = sess.setTitle; P.changed({ type: 'session' }); question(true); }, 'btn-primary') : null,
           btn('New quiz', () => { s.session = null; P.save(); setup({ setId: sess.setId }); }, missed.length ? '' : 'btn-primary'),
@@ -599,6 +641,9 @@
         review.append(item);
       });
       left.append(review);
+      [...left.children].forEach((child, i) => child.style.setProperty('--i', String(Math.min(i, 8))));
+      replay(left, 'qz-q-enter');
+      countUp(left.querySelector('.qz-ring-num'), pct);
       requestAnimationFrame(() => left.querySelector('h2')?.focus({ preventScroll: true }));
     }
 
@@ -613,7 +658,7 @@
       if ((opts.setId || opts.setup) && !active) { if (s.session) { s.session = null; P.save(); } setup(opts); return; }
       question(opts.focus !== false);
     }
-    offs.push(SS.bus.on('play', e => { if (['answer', 'spend', 'game', 'settings', 'load'].includes(e.type)) paintGateBits(); if (e.type === 'settings' && left.querySelector('.qz-form-grid') && !s.session) setup({ focus: false }); }));
+    offs.push(SS.bus.on('play', e => { if (['answer', 'spend', 'game', 'settings', 'load'].includes(e.type)) paintGateBits(e); if (e.type === 'settings' && left.querySelector('.qz-form-grid') && !s.session) setup({ focus: false }); }));
     offs.push(SS.bus.on('data:quizzes', () => { if (!s.session || s.session.finished) { if (left.querySelector('.qz-form-grid, .empty')) setup({ focus: false }); } }));
     layout();
     start(firstOpts);
@@ -631,8 +676,13 @@
       const gear = el('button.icon-btn.sm', { type: 'button', title: 'Customize this game', aria: { label: 'Customize this game' }, on: { click: () => customizeDialog(P.game()) } }, SS.icon('palette', 16));
       const help = el('button.icon-btn.sm', { type: 'button', title: 'How moves work', aria: { label: 'How moves work in this game' }, on: { click: () => { const g = P.progress(); SS.ui.toast(`${P.games.get(P.game())?.rules || ''} Every ${g.need} correct answers unlock ${U.plural(g.grant, 'move')}.`, { icon: 'info', timeout: 7000 }); } } }, SS.icon('help', 16));
       const hide = el('button.icon-btn.sm', { type: 'button', title: 'Hide the game', aria: { label: 'Hide the game panel' }, on: { click: () => { s.panel.visible = false; P.save(); layout(); left.focus({ preventScroll: true }); } } }, SS.icon('eyeOff', 16));
+      // a bigger game in one click (and back to the size it was)
+      let restore = 0.46;
+      const isBig = () => s.panel.ratio >= 0.62;
+      const expand = el('button.icon-btn.sm', { type: 'button', on: { click: () => { if (isBig()) s.panel.ratio = restore < 0.62 ? restore : 0.46; else { restore = s.panel.ratio; s.panel.ratio = 0.68; } P.save(); layout(); } } });
       const bodyEl = el('div.gp-body', { tabIndex: -1 });
-      root.append(el('header.gp-head', select, moves, el('div.gp-tools', help, gear, hide)), bodyEl);
+      const headEl = el('header.gp-head', select, moves, el('div.gp-tools', help, gear, expand, hide));
+      root.append(headEl, bodyEl);
       let mounted = null, mountedId = null;
       function mountGame() {
         const id = P.game();
@@ -640,7 +690,7 @@
         if (mounted) { try { mounted.destroy(); } catch (err) { console.error(err); } }
         mounted = null; mountedId = id;
         const def = P.games.get(id);
-        const host2 = el('div.gp-game'); bodyEl.replaceChildren(host2);
+        const host2 = el('div.gp-game.gp-in'); bodyEl.replaceChildren(host2);
         if (!def) { host2.append(SS.ui.empty('alert', 'This game isn’t available', 'Reload the page and try again.')); return; }
         try { mounted = def.mount(host2, { keyTarget: root }); } catch (err) { console.error('[Tester] game failed', err); host2.replaceChildren(SS.ui.empty('alert', `${def.title} hit a problem`, 'Your board is saved. Try another game, then come back.')); }
       }
@@ -650,10 +700,25 @@
         moves.textContent = n ? `${U.plural(n, 'move')} available` : 'No moves available';
         moves.classList.toggle('has', n > 0);
       }
-      const off = SS.bus.on('play', e => { if (e.type === 'game') { mountGame(); paint(); } else if (['answer', 'spend', 'settings', 'load'].includes(e.type)) paint(); if (e.type === 'answer' && e.granted) { moves.classList.remove('pulse'); void moves.offsetWidth; moves.classList.add('pulse'); } });
+      const off = SS.bus.on('play', e => {
+        if (e.type === 'game') { mountGame(); paint(); } else if (['answer', 'spend', 'settings', 'load'].includes(e.type)) paint();
+        if (e.type === 'answer' && e.granted) {
+          replay(moves, 'pulse');
+          const gain = el('span.gp-gain', { text: `+${e.granted}`, aria: { hidden: 'true' }, style: { left: `${moves.offsetLeft + moves.offsetWidth + 6}px`, top: `${moves.offsetTop + moves.offsetHeight / 2}px` } });
+          headEl.append(gain); setTimeout(() => gain.remove(), 1600);
+        }
+      });
       mountGame(); paint();
       return {
         el: root,
+        paintExpand(narrowNow) {
+          expand.hidden = narrowNow;
+          const big = isBig();
+          expand.replaceChildren(SS.icon(big ? 'minimize' : 'maximize', 16));
+          expand.title = big ? 'Make the game smaller' : 'Make the game bigger';
+          expand.setAttribute('aria-label', expand.title);
+          expand.setAttribute('aria-pressed', String(big));
+        },
         focusGame: () => requestAnimationFrame(() => mounted?.focus ? mounted.focus() : bodyEl.focus()),
         destroy() { off(); if (mounted) { try { mounted.destroy(); } catch (_) { /* gone */ } } mounted = null; }
       };
@@ -680,20 +745,22 @@
     const wrap = el('section.qz-section');
     host.replaceChildren(wrap);
     function draw() {
-      previews.forEach(p => p.destroy()); previews.length = 0;
+      previews.forEach(p => p.destroy()); previews.length = 0; cardIndex = 0;
       const st = P.state;
-      const totalWins = P.GAMES.reduce((n, id) => n + st.wins[id], 0);
+      const totalWins = P.totalWins();
+      const tetris = st.legacy && st.legacy.tetris;
       wrap.replaceChildren(
         el('div.qz-stats',
           stat('Wins', totalWins), stat('Correct answers', st.stats.correct), stat('Questions answered', st.stats.answered), stat('Quizzes started', st.stats.sessions)),
-        el('p.hint', { text: 'A win counts once, when you finish a game: checkmate the chess bot, complete all four Solitaire foundations, reach the 2048 target tile, or clear the Tetris line target.' }),
+        el('p.hint', { text: `A win counts once, when you finish a game: checkmate the chess bot, complete all four Solitaire foundations, reach the 2048 target tile, or reach the Block Puzzle score target.${tetris && tetris.wins ? ` Your total includes ${U.plural(tetris.wins, 'Tetris win')} from before Block Puzzle replaced Tetris.` : ''}` }),
         el('div.qz-games', P.GAMES.map(id => card(id))));
     }
     const stat = (label, value) => el('div.qz-stat', el('b', { text: Number(value).toLocaleString() }), el('span', { text: label }));
+    let cardIndex = 0;
     function card(id) {
       const def = P.games.get(id); const st = P.state;
       const isOpen = open === id;
-      const box = el('article.qz-game', { class: isOpen ? 'open' : '' },
+      const box = el('article.qz-game', { class: isOpen ? 'open' : '', style: { '--i': String(cardIndex++) } },
         el('div.qz-game-head',
           el('span.qz-game-icon', { text: def.icon, aria: { hidden: 'true' } }),
           el('div.qz-game-copy', el('h3', { text: def.title }), el('p.hint', { text: def.description }), el('p.qz-game-sum', { text: def.summary ? def.summary(P.data(id)) : '' })),

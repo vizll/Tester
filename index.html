@@ -7753,7 +7753,7 @@ dialog .wl-desc { color: var(--ui-muted); }
       const play = rawPlay ? SS.play.sanitize(rawPlay) : null;
       const images = (Array.isArray(parsed.images) ? parsed.images : []).filter(i => U.isObj(i) && typeof i.id === 'string' && typeof i.data === 'string' && /^data:image\//.test(i.data)).map(i => ({ id: i.id.slice(0, 80), data: i.data, kind: i.kind === 'widget' ? 'widget' : 'bg', name: U.str(i.name, 200), at: Number(i.at) || Date.now() }));
       const counts = ['notes', 'assignments', 'events', 'reminders', 'todos', 'quizzes', 'subjects'].map(c => `${content[c].length} ${c === 'quizzes' ? 'study sets' : c === 'todos' ? 'to-dos' : c}`).join(', ');
-      const wins = play ? SS.play.GAMES.reduce((n, id) => n + play.wins[id], 0) : 0;
+      const wins = play ? SS.play.totalWins(play) : 0;
       const dlg = SS.ui.dialog({ eyebrow: 'Restore', title: 'Restore this backup?', size: 'sm' });
       dlg.body.append(el('p.dlg-message', { text: `Backup from ${parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleString() : 'an unknown date'}.` }),
         el('p.hint', { text: `${counts}; ${U.plural(wsList.length, 'theme')}; ${U.plural(pages.length, 'custom tab')}; ${U.plural(images.length, 'photo')}${play ? `; game progress with ${U.plural(wins, 'win')}` : ''}.` }),
@@ -7787,6 +7787,7 @@ dialog .wl-desc { color: var(--ui-muted); }
       if (play) {
         const st = SS.play.state;
         SS.play.GAMES.forEach(id => { st.wins[id] = Math.max(st.wins[id], play.wins[id]); st.actions[id] = Math.max(st.actions[id], play.actions[id]); if (!U.isObj(st.gameData[id]) && U.isObj(play.gameData[id])) st.gameData[id] = play.gameData[id]; });
+        Object.entries(play.legacy).forEach(([id, r]) => { const mine = st.legacy[id] || { wins: 0, moves: 0 }; st.legacy[id] = { wins: Math.max(mine.wins, r.wins), moves: Math.max(mine.moves, r.moves) }; });
         ['correct', 'answered', 'sessions'].forEach(k => { st.stats[k] = Math.max(st.stats[k], play.stats[k]); });
         SS.play.save();
       }
@@ -7887,7 +7888,7 @@ dialog .wl-desc { color: var(--ui-muted); }
     const dlg = SS.ui.dialog({ eyebrow: 'Help', title: 'Keyboard shortcuts', size: 'md', footer: false });
     const rows = [['E', 'Edit layout on / off'], ['A', 'Add a widget'], ['N', 'Quick add'], ['Q', 'Jump to Quick capture (if on this dashboard)'], [',', 'Customize'], ['T', 'Switch theme'], ['[ / ]', 'Previous / next theme'], ['Ctrl + Z', 'Undo the last delete or move'], ['P', 'Start / pause the study timer'], ['?', 'This list'],
       ['—', ''], ['Right-click', 'Widget menu (or press the ⋯ button, Shift+F10, or the Menu key)'], ['Arrow keys', 'On a widget’s grip in edit mode: move it'], ['Shift + arrows', 'On the grip: resize'], ['Alt + ↑ / ↓', 'Reorder a to-do, a sidebar tab, or a card in the set editor'], ['Esc', 'Close a dialog or menu'],
-      ['—', ''], ['1 – 4 / T, F', 'Quiz: choose an answer'], ['Enter', 'Quiz: check a written answer, then go to the next question'], ['Arrow keys', 'Game panel: play (only while focus is in the game)'], ['Space', 'Tetris: drop the piece (only while focus is in the game)']];
+      ['—', ''], ['1 – 4 / T, F', 'Quiz: choose an answer'], ['Enter', 'Quiz: check a written answer, then go to the next question'], ['Arrow keys', 'Game panel: play (only while focus is in the game)'], ['1 – 3, then arrows + Enter', 'Block Puzzle: pick a piece, move it, place it (only while focus is in the game)']];
     dlg.body.append(el('table.kbd-table', el('tbody', rows.map(([k, d]) => k === '—' ? el('tr.sep', el('td', { attrs: { colspan: 2 } })) : el('tr', el('td', k.split(' / ').map((x, i) => [i ? ' / ' : '', ...x.split(' + ').map((y, j) => [j ? ' + ' : '', el('kbd', { text: y })])])), el('td', { text: d }))))));
   };
 
@@ -8305,8 +8306,10 @@ dialog .wl-desc { color: var(--ui-muted); }
       if (notices.length) SS.ui.toast(`Some saved data (${notices.join(', ')}) couldn’t be read. A copy was kept and the rest loaded normally.`, { kind: 'error', timeout: 0 });
       if (SS.store.mode === 'memory') SS.ui.toast('This browser is blocking storage, so changes won’t be kept after you close the tab. Export a backup from Customize → Data.', { kind: 'error', timeout: 0 });
       if (isNew || (meta.migratedFrom && !SS.prefs.get('upgradeSeen')) || !SS.prefs.get('onboarded')) setTimeout(() => SS.panels.welcome(), 350);
-      else if (meta.whatsNew !== 3) setTimeout(() => SS.ui.toast('What’s new: study sets, quizzes and your games now live in the Quiz tab — 3 correct answers unlock 3 moves, with the game right beside your questions. Points and the shop are gone; your moves, wins and profile looks were kept.', { icon: 'sparkles', timeout: 0, action: { label: 'Open Quiz', fn: () => SS.nav.go('quiz') } }), 600);
-      meta.whatsNew = 3; SS.store.save('meta', () => meta);
+      else if (meta.whatsNew !== 4) setTimeout(() => SS.ui.toast(meta.whatsNew === 3
+        ? 'What’s new: Tetris is now Block Puzzle — drag pieces onto the board and an outline shows where they’ll land. Your unused Tetris moves carried over and your Tetris wins are still counted. Chess has a bigger board and nine bot levels.'
+        : 'What’s new: study sets, quizzes and your games now live in the Quiz tab — 3 correct answers unlock 3 moves, with the game right beside your questions. Points and the shop are gone; your moves, wins and profile looks were kept.', { icon: 'sparkles', timeout: 0, action: { label: 'Open Quiz', fn: () => SS.nav.go('quiz') } }), 600);
+      meta.whatsNew = 4; SS.store.save('meta', () => meta);
       SS.bus.on('prefs', ({ key }) => { if (key === 'weekStart' || key === 'hour12') SS.bus.emit('day'); });
     } catch (err) {
       console.error('[Tester] failed to start', err);

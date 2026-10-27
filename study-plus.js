@@ -2,16 +2,21 @@
    game (by default 3 correct answers → 3 moves). This module owns that learning gate, the per-game
    boards and preferences, wins, and the profile shown in the sidebar. It is saved with everything
    else in the main store (key "play"); version 1 lived in localStorage ("studyspace-play-v1") together
-   with a points economy that no longer exists, and is migrated once on startup. */
+   with a points economy that no longer exists, and is migrated once on startup. Version 3 replaced Tetris
+   with Block Puzzle: unused Tetris moves carry over and Tetris wins stay on record as Tetris wins. */
 (function (SS) {
   'use strict';
   const U = SS.util;
   const { el } = U;
-  const GAMES = ['chess', 'solitaire', '2048', 'tetris'];
-  const VERSION = 2;
+  const GAMES = ['chess', 'solitaire', '2048', 'blocks'];
+  const VERSION = 3;
   const LEGACY_KEY = 'studyspace-play-v1';
   const MAX_COUNTED = 400;
-  const counts = v => Object.fromEntries(GAMES.map(id => [id, Math.max(0, Math.min(1e6, Math.floor(Number(v && v[id]) || 0)))]));
+  const whole = (v, max = 1e6) => Math.max(0, Math.min(max, Math.floor(Number(v) || 0)));
+  // `carry`: a Tetris count (saved before version 3) becomes the Block Puzzle count
+  const counts = (v, carry = false) => Object.fromEntries(GAMES.map(id => [id, whole(v && (v[id] ?? (carry && id === 'blocks' ? v.tetris : 0)))]));
+  const gameId = id => (id === 'tetris' ? 'blocks' : id);
+  const TETRIS_TARGETS = { 5: 1500, 10: 3000, 20: 6000, 40: 12000 };
   const QUIZ_MODES = ['mixed', 'choice', 'written', 'tf'];
   // only well-formed base64 images: these end up in CSS url("…") and <img src>
   const IMAGE_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/;
@@ -39,6 +44,7 @@
     settings: { need: 3, grant: 3 },       // correct answers needed → moves granted
     wins: counts(),
     stats: { correct: 0, answered: 0, sessions: 0, moves: counts() },
+    legacy: {},                            // retired games' records, e.g. { tetris: { wins, moves } }
     counted: [],                           // keys of submitted questions that already counted
     quiz: { mode: 'mixed', direction: 'def', limit: 10, shuffle: true, strict: false },
     panel: { visible: true, ratio: 0.46, pane: 'quiz' },
@@ -55,36 +61,46 @@
     strict: raw.strict === true
   });
 
-  /* Accepts version 1 (localStorage, with credits/points/shop fields) and version 2. Unknown and
-     removed fields (points, lifetime, owned cosmetics, reward pop-up settings) are dropped. */
+  /* Accepts version 1 (localStorage, with credits/points/shop fields), version 2 (with Tetris) and
+     version 3. Unknown and removed fields (points, lifetime, owned cosmetics, reward pop-up settings) are dropped. */
   function sanitize(raw) {
     const s = defaults();
     if (!U.isObj(raw)) return s;
-    const v1 = !(Number(raw.version) >= 2);
+    const version = Number(raw.version) >= 2 ? Number(raw.version) : 1;
+    const v1 = version < 2;
     const set = U.isObj(raw.settings) ? raw.settings : {};
     s.settings.need = U.clampNum(Math.floor(v1 ? set.threshold : set.need), 1, 100, 3);
     s.settings.grant = U.clampNum(Math.floor(v1 ? set.turns : set.grant), 1, 100, 3);
     const oldQuiz = U.isObj(raw.quizOptions) ? raw.quizOptions : {};
     s.quiz = quizOptions(U.isObj(raw.quiz) ? raw.quiz : oldQuiz);
-    s.game = GAMES.includes(raw.game) ? raw.game : GAMES.includes(oldQuiz.rewardGame) ? oldQuiz.rewardGame : 'chess';
-    s.actions = counts(v1 ? raw.credits : raw.actions);
+    s.game = GAMES.includes(gameId(raw.game)) ? gameId(raw.game) : GAMES.includes(gameId(oldQuiz.rewardGame)) ? gameId(oldQuiz.rewardGame) : 'chess';
+    s.actions = counts(v1 ? raw.credits : raw.actions, true);
     s.wins = counts(raw.wins);
+    const rawStats = U.isObj(raw.stats) ? raw.stats : {};
+    const oldTetris = version < 3 ? { wins: whole(U.isObj(raw.wins) ? raw.wins.tetris : 0), moves: whole(U.isObj(rawStats.moves) ? rawStats.moves.tetris : 0, 1e9) }
+      : U.isObj(raw.legacy) && U.isObj(raw.legacy.tetris) ? { wins: whole(raw.legacy.tetris.wins), moves: whole(raw.legacy.tetris.moves, 1e9) } : null;
+    if (oldTetris && (oldTetris.wins || oldTetris.moves)) s.legacy.tetris = oldTetris;
     if (v1) {
       // per-game progress becomes one shared counter: keep the selected game's (or the furthest) progress
-      const p = counts(raw.progress);
-      const pick = GAMES.includes(oldQuiz.rewardGame) ? p[oldQuiz.rewardGame] : Math.max(...GAMES.map(id => p[id]));
+      const p = counts(raw.progress, true);
+      const pick = GAMES.includes(gameId(oldQuiz.rewardGame)) ? p[gameId(oldQuiz.rewardGame)] : Math.max(...GAMES.map(id => p[id]));
       s.progress = pick % s.settings.need;
       if (U.isObj(raw.profile)) s.stats.correct = Math.max(0, Math.floor(Number(raw.profile.correct) || 0));
     } else {
       s.progress = U.clampNum(Math.floor(raw.progress), 0, s.settings.need - 1, 0);
-      const st = U.isObj(raw.stats) ? raw.stats : {};
+      const st = rawStats;
       s.stats = { correct: U.clampNum(Math.floor(st.correct), 0, 1e9, 0), answered: U.clampNum(Math.floor(st.answered), 0, 1e9, 0), sessions: U.clampNum(Math.floor(st.sessions), 0, 1e9, 0), moves: counts(st.moves) };
       s.counted = (Array.isArray(raw.counted) ? raw.counted : []).filter(k => typeof k === 'string' && k.length < 120).slice(-MAX_COUNTED);
       const pn = U.isObj(raw.panel) ? raw.panel : {};
       s.panel = { visible: pn.visible !== false, ratio: U.clampNum(pn.ratio, 0.28, 0.72, 0.46), pane: pn.pane === 'game' ? 'game' : 'quiz' };
     }
     s.gameData = {};
-    const gd = U.isObj(raw.gameData) ? raw.gameData : {};
+    const gd = { ...(U.isObj(raw.gameData) ? raw.gameData : {}) };
+    if (version < 3 && U.isObj(gd.tetris) && !U.isObj(gd.blocks)) {
+      // keep the Tetris look (colours, board, grid, corners) and target size for Block Puzzle; the old board is dropped
+      const tp = U.isObj(gd.tetris.prefs) ? gd.tetris.prefs : {};
+      gd.blocks = { prefs: { palette: tp.palette, boardColor: tp.background, grid: tp.grid, squareBlocks: tp.squareBlocks, target: TETRIS_TARGETS[tp.target] } };
+    }
     GAMES.forEach(id => {
       if (!U.isObj(gd[id])) return;
       const def = P.games.get(id);
@@ -116,6 +132,8 @@
 
     /* Games register their board, preview and settings here (see chess.js and arcade-games.js) */
     register(id, def) { if (GAMES.includes(id)) P.games.set(id, { id, ...def }); },
+    /* Wins across every game, including retired ones (Tetris) */
+    totalWins: (st = state) => GAMES.reduce((n, id) => n + (st.wins[id] || 0), 0) + Object.values(st.legacy || {}).reduce((n, r) => n + (r.wins || 0), 0),
     title: id => P.games.get(id)?.title || id,
     icon: id => P.games.get(id)?.icon || '🎮',
     data(id) { if (!U.isObj(state.gameData[id])) state.gameData[id] = {}; return state.gameData[id]; },

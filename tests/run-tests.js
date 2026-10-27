@@ -52,6 +52,8 @@ async function closeDialogs(page) {
   for (let i = 0; i < 3; i++) { if (await page.$('dialog[open]')) { await page.keyboard.press('Escape'); await page.waitForTimeout(250); } }
 }
 const flush = page => page.evaluate(() => SS.store.flush());
+// navigating moves focus to the new view one frame later (SS.nav); wait for it before using the keyboard
+const frames = page => page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 const addSet = (page, cards, title = 'Test set') => page.evaluate(([cards, title]) => SS.data.add('quizzes', { title, cards }).id, [cards, title]);
 const CARDS = [['alpha', 'one'], ['beta', 'two'], ['gamma', 'three'], ['delta', 'four'], ['epsilon', 'five'], ['zeta', 'six']].map(([term, def]) => ({ term, def }));
 
@@ -83,7 +85,7 @@ test('play state: version-1 save migrates (moves, wins, profile kept; points/sho
     const s = SS.play.sanitize(v1);
     return { s, keys: Object.keys(s), profileKeys: Object.keys(s.profile) };
   });
-  eq(r.s.actions, { chess: 5, solitaire: 0, '2048': 2, tetris: 1 }, 'actions');
+  eq(r.s.actions, { chess: 5, solitaire: 0, '2048': 2, blocks: 1 }, 'actions (unused Tetris moves → Block Puzzle)');
   eq(r.s.wins['2048'], 3, 'wins kept');
   eq(r.s.progress, 2, 'progress of the selected game');
   eq(r.s.game, 'chess', 'selected game');
@@ -93,7 +95,21 @@ test('play state: version-1 save migrates (moves, wins, profile kept; points/sho
   assert(!r.profileKeys.includes('points') && !r.profileKeys.includes('owned') && !r.profileKeys.includes('lifetime'), 'points/shop fields dropped');
   eq(r.s.gameData.chess.game.history, ['e4', 'e5'], 'chess history migrated');
   eq(r.s.gameData.chess.prefs.difficulty, 'expert', 'chess prefs migrated');
-  eq(r.s.version, 2, 'version');
+  eq(r.s.version, 3, 'version');
+});
+
+test('play state: version-2 save with Tetris becomes Block Puzzle (moves carried, Tetris wins kept on record)', async ({ page }) => {
+  const r = await page.evaluate(() => {
+    const v2 = { version: 2, game: 'tetris', actions: { chess: 1, solitaire: 0, '2048': 0, tetris: 5 }, progress: 2, settings: { need: 3, grant: 3 }, wins: { chess: 1, solitaire: 0, '2048': 0, tetris: 3 }, stats: { correct: 9, answered: 12, sessions: 2, moves: { chess: 4, solitaire: 0, '2048': 0, tetris: 30 } }, gameData: { tetris: { prefs: { palette: 'neon', background: '#101010', grid: false, squareBlocks: true, target: 20 }, game: { board: [] } } } };
+    const s = SS.play.sanitize(v2);
+    return { s, total: SS.play.totalWins(s), again: SS.play.sanitize(JSON.parse(JSON.stringify(s))) };
+  });
+  eq(r.s.game, 'blocks', 'selected game'); eq(r.s.actions.blocks, 5, 'moves carried over'); assert(!('tetris' in r.s.actions), 'no Tetris moves left');
+  eq(r.s.wins, { chess: 1, solitaire: 0, '2048': 0, blocks: 0 }, 'Block Puzzle starts with no wins');
+  eq(r.s.legacy, { tetris: { wins: 3, moves: 30 } }, 'Tetris record kept'); eq(r.total, 4, 'total wins include Tetris wins');
+  eq(r.s.gameData.blocks.prefs, { target: 6000, palette: 'neon', boardColor: '#101010', grid: false, ghost: true, clearHint: true, squareBlocks: true }, 'Tetris look carried over');
+  assert(!r.s.gameData.tetris, 'old board dropped');
+  eq(r.again.legacy, r.s.legacy, 'version 3 round trip keeps the record'); eq(r.again.actions, r.s.actions, 'and the moves');
 });
 
 test('learning gate: 2 correct lock, 3rd grants 3 once; wrong and repeats don’t count', async ({ page }) => {
@@ -144,17 +160,31 @@ test('grading: typos forgiven, numbers/negation/strict enforced', async ({ page 
   eq(r, [true, false, false, true, false, false], 'grading results');
 });
 
-test('game mechanics: 2048 slide, Solitaire/Tetris sanitizers', async ({ page }) => {
+test('game mechanics: 2048 slide, Solitaire sanitizer, Block Puzzle placing/clearing/dealing', async ({ page }) => {
   const r = await page.evaluate(() => {
     const M = window.SSArcadeMechanics;
     const s = M.slide2048([2, 2, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 4, 'left');
     const noChange = M.slide2048([2, 4, 8, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 4, 'left');
     const sol = M.freshSolitaire(); const dup = JSON.parse(JSON.stringify(sol)); dup.stock[0] = dup.stock[1];
-    const t = M.freshTetris({ target: 10 }); const bad = { ...t, board: t.board.slice(0, 5) };
-    return { row: s.board.slice(0, 4), score: s.score, noChange: noChange.changed, solOk: !!M.sanitizeSolitaire({ game: sol }).game, solDup: !!M.sanitizeSolitaire({ game: dup }).game, tetOk: !!M.sanitizeTetris({ game: t }).game, tetBad: !!M.sanitizeTetris({ game: bad }).game };
+    // row 0 and column 7 each miss only the top-right square: one block there clears both at once
+    const b = Array(64).fill(0); for (let c = 0; c < 7; c++) b[c] = 1; for (let y = 1; y < 8; y++) b[y * 8 + 7] = 2;
+    const cross = M.bbPlace(b, 'dot-0', 0, 7, 3);
+    const nearlyFull = Array(64).fill(1); nearlyFull[27] = 0;
+    const deals = Array.from({ length: 20 }, () => M.bbDeal(nearlyFull)).every(t => M.bbAnyFit(nearlyFull, t));
+    const fresh = M.freshBlocks({ target: 3000 });
+    const shapes = Object.values(M.BB_SHAPES);
+    return { row: s.board.slice(0, 4), score: s.score, merged: s.merged, noChange: noChange.changed, solOk: !!M.sanitizeSolitaire({ game: sol }).game, solDup: !!M.sanitizeSolitaire({ game: dup }).game,
+      cross: { lines: cross.lines, cleared: cross.cleared.length, empty: cross.board.every(v => !v) }, fits: [M.bbFits(b, 'i2-0', 0, 6), M.bbFits(b, 'i2-0', 1, 0), M.bbFits(b, 'o3-0', 6, 6)], points: M.bbScore(1, 2, 1), combo: M.bbScore(3, 1, 3), deals,
+      okGame: !!M.sanitizeBlocks({ game: fresh }).game, badBoard: !!M.sanitizeBlocks({ game: { ...fresh, board: fresh.board.slice(0, 5) } }).game, badPiece: !!M.sanitizeBlocks({ game: { ...fresh, tray: [{ shape: 'nope', color: 1 }, null, null] } }).game,
+      shapesOk: shapes.length > 30 && shapes.every(x => x.cells.every(([y, c]) => y < x.h && c < x.w)) };
   });
-  eq(r.row, [4, 4, 0, 0], '2048 merge'); eq(r.score, 4, '2048 score'); eq(r.noChange, false, 'no-op slide detected');
-  eq([r.solOk, r.solDup, r.tetOk, r.tetBad], [true, false, true, false], 'sanitizers');
+  eq(r.row, [4, 4, 0, 0], '2048 merge'); eq(r.score, 4, '2048 score'); eq(r.merged, [0], '2048 merged square'); eq(r.noChange, false, 'no-op slide detected');
+  eq([r.solOk, r.solDup], [true, false], 'solitaire sanitizer');
+  eq(r.cross, { lines: 2, cleared: 15, empty: true }, 'a row and a column clear together');
+  eq(r.fits, [false, true, false], 'fit checks (overlap, free, off the board)');
+  eq([r.points, r.combo], [310, 230], 'scoring: 10 a block, line bonus, combo boost');
+  assert(r.deals, 'a new tray always has a piece that fits when anything can');
+  eq([r.okGame, r.badBoard, r.badPiece], [true, false, false], 'block puzzle sanitizer'); assert(r.shapesOk, 'shape catalogue');
 });
 
 test('chess rules: castling, en passant, every promotion, check/mate, stalemate, draws', async ({ page }) => {
@@ -249,7 +279,7 @@ test('split session: gate unlocks after 3 correct, game playable immediately, no
 
 test('session and board survive reload; checked feedback restored', async ({ page }) => {
   const setId = await addSet(page, CARDS);
-  await page.evaluate(() => SS.play.setGame('tetris'));
+  await page.evaluate(() => SS.play.setGame('blocks'));
   await startWrittenQuiz(page, setId, 4);
   await answer(page, true);
   const q = await currentQuestion(page);
@@ -259,26 +289,28 @@ test('session and board survive reload; checked feedback restored', async ({ pag
   eq((await currentQuestion(page)).prompt, q.prompt, 'same question after reload');
   eq(await page.inputValue('.qz-written'), q.expected, 'answer text kept');
   assert(await page.isVisible('.qz-qfoot button:has-text("Next question")'), 'next button shown for a checked question');
-  eq(await page.inputValue('.gp-select'), 'tetris', 'game selection kept');
+  eq(await page.inputValue('.gp-select'), 'blocks', 'game selection kept');
 });
 
-test('keyboard isolation: Space on a quiz button never drops a Tetris piece', async ({ page }) => {
+test('keyboard isolation: keys in the quiz never pick up or place a Block Puzzle piece', async ({ page }) => {
   const setId = await addSet(page, CARDS);
-  await page.evaluate(() => { SS.play.setGame('tetris'); SS.play.state.actions.tetris = 3; SS.play.save(); });
+  await page.evaluate(() => { SS.play.setGame('blocks'); SS.play.state.actions.blocks = 3; SS.play.save(); });
   await startWrittenQuiz(page, setId, 4);
-  await page.focus('.qz-qfoot button:has-text("End quiz")');
-  await page.evaluate(() => document.querySelector('.qz-qfoot button').blur());
   await page.focus('.qz-qfoot button:has-text("Check answer")');
+  await page.keyboard.press('1');
   await page.keyboard.press('Space');
-  eq((await play(page)).actions.tetris, 3, 'Space on Check answer did not reach Tetris');
-  await page.focus('.ag-tetris-board');
-  await page.keyboard.press('ArrowLeft');
-  eq((await play(page)).actions.tetris, 3, 'moving a piece is free');
+  eq((await play(page)).actions.blocks, 3, 'Space on Check answer did not reach the game');
+  eq(await page.$$eval('.ag-bb-cell.ghost', n => n.length), 0, '“1” in the quiz did not pick up a piece');
+  await page.focus('.ag-bb-board');
+  await page.keyboard.press('1');
+  assert(await page.$$eval('.ag-bb-cell.ghost', n => n.length) > 0, '“1” on the board picks up piece 1 and shows where it goes');
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowDown');
+  eq((await play(page)).actions.blocks, 3, 'moving a picked-up piece is free');
   await page.keyboard.press('Space');
-  eq((await play(page)).actions.tetris, 2, 'Space on the board drops (one move)');
+  eq((await play(page)).actions.blocks, 2, 'Space on the board places it (one move)');
   await page.focus('.gp-select');
   await page.keyboard.press('ArrowDown');
-  eq((await play(page)).actions.tetris, 2, 'arrows on the game selector are not game input');
+  eq((await play(page)).actions.blocks, 2, 'arrows on the game selector are not game input');
 });
 
 test('divider resize, hide/show and narrow switcher keep the game mounted', async ({ page }) => {
@@ -466,23 +498,84 @@ test('chess vs Stockfish: move costs one, bot reply free; reset during search ig
   eq(await page.evaluate(() => SS.play.data('chess').game.history.length), 2, 'exactly one bot reply after navigation');
 }, { timeout: 90000 });
 
-test('tetris: positioning is free, a locked piece costs one, clearing the target counts one win', async ({ page }) => {
+test('block puzzle: dragging outlines where the piece lands (red when it won’t fit); only a placed piece costs a move', async ({ page }) => {
   await page.evaluate(() => {
-    const board = Array.from({ length: 20 }, () => Array(10).fill(''));
-    board[19] = ['Z', 'Z', 'Z', '', '', '', '', 'S', 'S', 'S'];
-    SS.play.data('tetris').game = { id: 't1', board, bag: ['O'], next: 'T', piece: { type: 'I', x: 3, y: 0, rot: 0 }, lines: 4, score: 0, moves: 0, won: false, winCounted: false, over: false, goal: 5 };
-    SS.play.setGame('tetris'); SS.play.state.actions.tetris = 2; SS.play.save(); SS.quiz.open('practice');
+    const board = Array(64).fill(0); board[5 * 8 + 5] = 4;
+    SS.play.data('blocks').game = { id: 'bd1', board, tray: [{ shape: 'i3-0', color: 1 }, { shape: 'dot-0', color: 2 }, { shape: 'o2-0', color: 3 }], score: 0, lines: 0, streak: 0, moves: 0, won: false, winCounted: false, over: false, goal: 3000 };
+    SS.play.setGame('blocks'); SS.play.state.actions.blocks = 2; SS.play.save(); SS.quiz.open('practice');
   });
-  await page.waitForSelector('.ag-tetris-board');
-  await page.focus('.ag-tetris-board');
-  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowLeft');
-  eq((await play(page)).actions.tetris, 2, 'moving is free');
-  await page.keyboard.press('Space');
+  await page.waitForSelector('.ag-bb-piece[data-slot="2"]');
+  await page.waitForTimeout(600);   // let the tray's entrance animation finish
+  // pointer position that holds a 2 × 2 piece over the squares starting at (r, c)
+  const over = (r, c) => page.evaluate(([r, c]) => { const cells = document.querySelectorAll('.ag-bb-cell'); const a = cells[r * 8 + c].getBoundingClientRect(), b = cells[(r + 1) * 8 + c + 1].getBoundingClientRect(); return { x: (a.left + b.right) / 2, y: (a.top + b.bottom) / 2 }; }, [r, c]);
+  const ghosts = () => page.evaluate(() => ({ cells: [...document.querySelectorAll('.ag-bb-cell')].map((n, i) => n.classList.contains('ghost') ? i : -1).filter(i => i >= 0), bad: document.querySelectorAll('.ag-bb-cell.ghost.bad').length, float: !!document.querySelector('.ag-bb-float') }));
+  const grab = async () => { const box = await (await page.$('.ag-bb-piece[data-slot="2"]')).boundingBox(); await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down(); };
+  await grab();
+  const blocked = await over(4, 4);
+  await page.mouse.move(blocked.x, blocked.y, { steps: 10 });
+  eq(await ghosts(), { cells: [36, 37, 44, 45], bad: 4, float: true }, 'red outline over a spot where it doesn’t fit');
+  await page.screenshot({ path: path.join(OUT, 'blocks-drag-bad.png') });
+  await page.mouse.up(); await page.waitForTimeout(350);
+  eq((await play(page)).actions.blocks, 2, 'a drop that doesn’t fit is free');
+  eq(await page.evaluate(() => SS.play.data('blocks').game.tray[2].shape), 'o2-0', 'the piece went back to the tray');
+  eq((await ghosts()).float, false, 'nothing left floating');
+  await grab();
+  const free = await over(1, 2);
+  await page.mouse.move(free.x, free.y, { steps: 10 });
+  eq(await ghosts(), { cells: [10, 11, 18, 19], bad: 0, float: true }, 'outline exactly where the piece will land');
+  await page.screenshot({ path: path.join(OUT, 'blocks-drag-ok.png') });
+  await page.mouse.up(); await page.waitForTimeout(100);
+  const g = await page.evaluate(() => SS.play.data('blocks').game);
+  eq((await play(page)).actions.blocks, 1, 'placing uses one move');
+  eq([g.board[10], g.board[11], g.board[18], g.board[19], g.tray[2], g.score], [3, 3, 3, 3, null, 40], 'placed where the outline showed');
+});
+
+test('block puzzle: keys pick and place, a full row clears, reaching the target counts one win', async ({ page }) => {
+  await page.evaluate(() => {
+    const board = Array(64).fill(0); for (let c = 2; c < 8; c++) board[c] = 5;
+    SS.play.data('blocks').game = { id: 'bd2', board, tray: [{ shape: 'i2-0', color: 1 }, { shape: 'dot-0', color: 2 }, { shape: 'dot-0', color: 3 }], score: 2900, lines: 0, streak: 0, moves: 0, won: false, winCounted: false, over: false, goal: 3000 };
+    SS.play.setGame('blocks'); SS.play.state.actions.blocks = 3; SS.play.save(); SS.quiz.open('practice');
+  });
+  await page.waitForSelector('.ag-bb-board .ag-bb-cell');
+  await frames(page);
+  await page.focus('.ag-bb-board');
+  await page.keyboard.press('1');
+  eq(await page.evaluate(() => [document.querySelectorAll('.ag-bb-cell.ghost').length, document.querySelectorAll('.ag-bb-cell.hint').length]), [2, 6], 'outline plus the row it would clear');
+  await page.keyboard.press('Enter');
   const p = await play(page);
-  eq(p.actions.tetris, 1, 'lock costs one'); eq(p.wins.tetris, 1, 'line target reached → one win');
-  eq(await page.evaluate(() => SS.play.data('tetris').game.lines), 5, 'line cleared');
-  await page.keyboard.press('Space');
-  eq((await play(page)).wins.tetris, 1, 'further pieces add no wins');
+  eq(p.actions.blocks, 2, 'placing costs one'); eq(p.wins.blocks, 1, 'score target reached → one win');
+  const g = await page.evaluate(() => SS.play.data('blocks').game);
+  eq([g.board.slice(0, 8).every(v => !v), g.lines, g.score, g.won], [true, 1, 3020, true], 'row cleared and scored');
+  await page.keyboard.press('2'); await page.keyboard.press('Enter');
+  eq((await play(page)).wins.blocks, 1, 'further pieces add no wins');
+  await flush(page); await boot(page);
+  eq((await play(page)).wins.blocks, 1, 'still one after reload');
+});
+
+test('chess levels: nine levels from Starter to Grandmaster; Starter searches one ply deep', async ({ page }) => {
+  const r = await page.evaluate(async () => {
+    const sent = [];
+    const W = window.Worker;
+    window.Worker = class { constructor() { setTimeout(() => this.onmessage({ data: 'uciok' }), 5); } postMessage(m) { sent.push(m); if (m === 'isready') setTimeout(() => this.onmessage({ data: 'readyok' }), 5); if (/^go /.test(m)) setTimeout(() => this.onmessage({ data: 'bestmove e7e5' }), 5); } terminate() {} };
+    try {
+      const e = SS.chessTest.createEngine(() => {}); e.start();
+      await new Promise(r => setTimeout(r, 40));
+      const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+      const a = await e.search(fen, SS.chessTest.LEVELS.starter);
+      const b = await e.search(fen, SS.chessTest.LEVELS.grandmaster);
+      e.destroy();
+      return { a, b, go: sent.filter(m => /^go /.test(m)), levels: Object.keys(SS.chessTest.LEVELS), bad: SS.chessTest.sanitize({ prefs: { difficulty: 'nope', contrast: 'weird' } }).prefs, keep: SS.chessTest.sanitize({ prefs: { difficulty: 'club', contrast: 'high' } }).prefs };
+    } finally { window.Worker = W; }
+  });
+  eq(r.levels, ['starter', 'beginner', 'casual', 'intermediate', 'club', 'professional', 'master', 'expert', 'grandmaster'], 'levels in order');
+  eq(r.go, ['go depth 1', 'go movetime 9000'], 'Starter is depth-limited; Grandmaster thinks longest');
+  eq([r.a, r.b], ['e7e5', 'e7e5'], 'replies returned');
+  eq([r.bad.difficulty, r.bad.contrast, r.keep.difficulty, r.keep.contrast], ['intermediate', 'clear', 'club', 'high'], 'level and contrast sanitized');
+  // the level picker on the board changes the saved difficulty
+  await page.evaluate(() => { SS.play.setGame('chess'); SS.quiz.open('practice'); });
+  await page.waitForSelector('.ss-chess-level');
+  await page.selectOption('.ss-chess-level', 'master');
+  eq(await page.evaluate(() => SS.play.data('chess').prefs.difficulty), 'master', 'quick level picker saves the level');
 });
 
 test('every built-in theme renders Home and Quiz without console errors', async ({ page }) => {
@@ -522,8 +615,8 @@ test('cleanup: repeated navigation and game switching leave no extra listeners o
     const base = await page.evaluate(() => SS.bus.size());
     for (let i = 0; i < 6; i++) {
       await page.evaluate(() => SS.quiz.open('practice')); await page.waitForSelector('.gp .ag-game');
-      for (const g of ['solitaire', '2048', 'tetris', 'chess']) await page.selectOption('.gp-select', g);
-      await page.evaluate(() => SS.quiz.open('games', { game: 'tetris' })); await page.waitForTimeout(80);
+      for (const g of ['solitaire', '2048', 'blocks', 'chess']) await page.selectOption('.gp-select', g);
+      await page.evaluate(() => SS.quiz.open('games', { game: 'blocks' })); await page.waitForTimeout(80);
       await page.evaluate(() => SS.nav.go('home')); await page.waitForTimeout(80);
     }
     await page.waitForTimeout(500);
@@ -597,9 +690,11 @@ test('custom tabs: start empty, independent layouts, reorder, rename, delete+und
   const tab1Pos = await page.evaluate(id => JSON.stringify(SS.ws.page(id).widgets[0].pos), tab1);
   await page.evaluate(() => { const w = SS.ws.surface().widgets[0]; SS.dash.setSize(w.id, 'xl'); });
   await page.click(`.nav-row[data-id="${tab1}"] .nav-item`);
+  await frames(page);
   eq(await page.$$eval('.widget', ns => ns.map(n => n.dataset.type)), ['timer'], 'tab 1 keeps only its widget');
   eq(await page.evaluate(id => JSON.stringify(SS.ws.page(id).widgets[0].pos), tab1), tab1Pos, 'tab 1 layout unaffected by tab 2 resize');
   await page.click('.nav-row[data-id="home"] .nav-item');
+  await frames(page);
   eq(await page.evaluate(() => SS.ws.active().widgets.length), homeCount, 'home layout unchanged');
   // keyboard reorder and rename
   await page.focus(`.nav-row[data-id="${tab2}"] .nav-item`);
@@ -673,7 +768,7 @@ test('keyboard focus is visible on sidebar, quiz answers, divider and board', as
 async function seedOldVersion(page) {
   await page.goto(`${BASE}/vendor/CHESS-LICENSE.txt`);
   await page.evaluate(async () => {
-    localStorage.setItem('studyspace-play-v1', JSON.stringify({ version: 1, credits: { chess: 4, solitaire: 1, '2048': 0, tetris: 2 }, wins: { chess: 2, solitaire: 0, '2048': 1, tetris: 0 }, progress: { chess: 1, solitaire: 0, '2048': 0, tetris: 0 }, settings: { threshold: 3, turns: 3, autoOpen: true }, quizOptions: { rewardGame: 'chess' }, profile: { name: 'Old', bio: 'from v1', points: 777, owned: ['aurora', 'simple', 'tide'], banner: 'tide', width: 300, collapsed: false }, gameData: { chess: { history: ['e4', 'e5', 'Nf3'], difficulty: 'beginner', preset: 'forest', won: false } } }));
+    localStorage.setItem('studyspace-play-v1', JSON.stringify({ version: 1, credits: { chess: 4, solitaire: 1, '2048': 0, tetris: 2 }, wins: { chess: 2, solitaire: 0, '2048': 1, tetris: 1 }, progress: { chess: 1, solitaire: 0, '2048': 0, tetris: 0 }, settings: { threshold: 3, turns: 3, autoOpen: true }, quizOptions: { rewardGame: 'chess' }, profile: { name: 'Old', bio: 'from v1', points: 777, owned: ['aurora', 'simple', 'tide'], banner: 'tide', width: 300, collapsed: false }, gameData: { chess: { history: ['e4', 'e5', 'Nf3'], difficulty: 'beginner', preset: 'forest', won: false } } }));
     localStorage.setItem('studyspace-play-widgets-ws_old', '1');
     const db = await new Promise((ok, fail) => { const r = indexedDB.open('studyspace', 1); r.onupgradeneeded = () => { r.result.createObjectStore('kv'); r.result.createObjectStore('images', { keyPath: 'id' }); }; r.onsuccess = () => ok(r.result); r.onerror = () => fail(r.error); });
     const put = (k, v) => new Promise(ok => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = ok; });
@@ -691,8 +786,9 @@ test('migration: old save keeps decks, layouts, boards, wins; removed rewards st
   await seedOldVersion(page);
   await boot(page);
   const r = await page.evaluate(() => ({ p: SS.play.state, types: SS.ws.active().widgets.map(w => w.type), decks: SS.data.all('quizzes').map(q => q.title), legacy: localStorage.getItem('studyspace-play-v1'), flag: localStorage.getItem('studyspace-play-widgets-ws_old'), nav: [...document.querySelectorAll('.nav-row')].map(n => n.dataset.id), width: SS.prefs.get('sidebar').width, reg: ['trophies', 'game-chess', 'quiz-plus'].map(t => SS.registry.has(t)) }));
-  eq(r.p.actions, { chess: 4, solitaire: 1, '2048': 0, tetris: 2 }, 'unused moves preserved');
-  eq(r.p.wins, { chess: 2, solitaire: 0, '2048': 1, tetris: 0 }, 'wins preserved');
+  eq(r.p.actions, { chess: 4, solitaire: 1, '2048': 0, blocks: 2 }, 'unused moves preserved (Tetris → Block Puzzle)');
+  eq(r.p.wins, { chess: 2, solitaire: 0, '2048': 1, blocks: 0 }, 'wins preserved');
+  eq(r.p.legacy, { tetris: { wins: 1, moves: 0 } }, 'Tetris win kept on record');
   eq(r.p.gameData.chess.game.history, ['e4', 'e5', 'Nf3'], 'board preserved');
   eq(r.p.profile.banner, 'tide', 'chosen cosmetic kept');
   eq(r.types.sort(), ['flashcards', 'timer'], 'quiz lab → flashcards; trophies and arcade tiles removed');
@@ -714,7 +810,7 @@ test('migration: old save keeps decks, layouts, boards, wins; removed rewards st
 test('backup: round trip restores tabs, boards, wins; old backups import without rewards or duplicates', async ({ page, browser }) => {
   await page.evaluate(() => {
     const t = SS.ws.createPage({ name: 'Backup tab', icon: 'star' }); t.widgets.push(SS.registry.newInstance('timer')); SS.ws.save();
-    SS.play.state.wins.tetris = 4; SS.play.state.actions.chess = 6; SS.play.data('chess').game = { id: 'b1', history: ['d4', 'd5'], won: false, winCounted: false }; SS.play.save();
+    SS.play.state.wins.blocks = 3; SS.play.state.legacy = { tetris: { wins: 4, moves: 10 } }; SS.play.state.actions.chess = 6; SS.play.data('chess').game = { id: 'b1', history: ['d4', 'd5'], won: false, winCounted: false }; SS.play.save();
   });
   await flush(page);
   const [dl] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => SS.panels.exportBackup(true))]);
@@ -731,15 +827,15 @@ test('backup: round trip restores tabs, boards, wins; old backups import without
     await p2.click('dialog button:has-text("Replace everything")');
     await p2.click('dialog.dlg-confirm button:has-text("Replace")');
     await p2.waitForFunction(() => SS.ws.pages().length === 1);
-    const r = await p2.evaluate(() => ({ wins: SS.play.state.wins.tetris, actions: SS.play.state.actions.chess, hist: SS.play.data('chess').game.history, tab: SS.ws.pages()[0].name, widgets: SS.ws.pages()[0].widgets.length }));
-    eq(r, { wins: 4, actions: 6, hist: ['d4', 'd5'], tab: 'Backup tab', widgets: 1 }, 'restored');
+    const r = await p2.evaluate(() => ({ wins: SS.play.state.wins.blocks, tetris: SS.play.state.legacy.tetris.wins, actions: SS.play.state.actions.chess, hist: SS.play.data('chess').game.history, tab: SS.ws.pages()[0].name, widgets: SS.ws.pages()[0].widgets.length }));
+    eq(r, { wins: 3, tetris: 4, actions: 6, hist: ['d4', 'd5'], tab: 'Backup tab', widgets: 1 }, 'restored');
     // merging the same backup again doesn't duplicate tabs/themes or add wins
     const themes = await p2.evaluate(() => SS.ws.all().length);
     const [chooser2] = await Promise.all([p2.waitForEvent('filechooser'), p2.evaluate(() => SS.panels.importBackup())]);
     await chooser2.setFiles(file);
     await p2.click('dialog button:has-text("Merge")');
     await p2.waitForTimeout(500);
-    eq(await p2.evaluate(() => [SS.ws.all().length, SS.ws.pages().length, SS.play.state.wins.tetris]), [themes, 1, 4], 'merge is idempotent');
+    eq(await p2.evaluate(() => [SS.ws.all().length, SS.ws.pages().length, SS.play.state.wins.blocks, SS.play.state.legacy.tetris.wins]), [themes, 1, 3, 4], 'merge is idempotent');
     // an old (version 2) backup with the reward record
     const old = { app: 'studyspace', version: 2, exportedAt: new Date().toISOString(), content: { quizzes: [{ id: 'oldq', title: 'From v2', cards: [{ term: 'x', def: 'y' }] }] }, workspaces: { version: 1, list: [{ id: 'ws_v2', name: 'V2 desk', appearance: {}, widgets: [{ id: 'w1', type: 'trophies', pos: { lg: { x: 0, y: 0, w: 4, h: 4 } } }, { id: 'w2', type: 'quiz-plus', pos: { lg: { x: 4, y: 0, w: 6, h: 5 } } }] }], activeId: 'ws_v2' }, prefs: {}, arcade: { version: 1, credits: { chess: 1 }, wins: { tetris: 9 }, profile: { points: 5000, owned: ['tide'] } } };
     const oldFile = path.join(OUT, 'old-backup.json'); fs.writeFileSync(oldFile, JSON.stringify(old));
@@ -747,9 +843,9 @@ test('backup: round trip restores tabs, boards, wins; old backups import without
     await chooser3.setFiles(oldFile);
     await p2.click('dialog button:has-text("Merge")');
     await p2.waitForTimeout(500);
-    const r3 = await p2.evaluate(() => ({ types: SS.ws.all().find(w => w.name.startsWith('V2 desk')).widgets.map(w => w.type), wins: SS.play.state.wins.tetris, keys: Object.keys(SS.play.state.profile), set: SS.data.all('quizzes').some(q => q.title === 'From v2') }));
+    const r3 = await p2.evaluate(() => ({ types: SS.ws.all().find(w => w.name.startsWith('V2 desk')).widgets.map(w => w.type), wins: SS.play.state.legacy.tetris.wins, keys: Object.keys(SS.play.state.profile), set: SS.data.all('quizzes').some(q => q.title === 'From v2') }));
     eq(r3.types, ['flashcards'], 'old reward widgets not resurrected');
-    eq(r3.wins, 9, 'merge keeps the higher win count (not 13)');
+    eq(r3.wins, 9, 'merge keeps the higher Tetris win count (not 13)');
     assert(!r3.keys.includes('points') && r3.set, 'no points; content merged');
   } finally { await fresh.context.close(); }
 });
@@ -859,11 +955,12 @@ for (const [w, h, label] of [[1440, 900, 'desktop'], [820, 1180, 'tablet'], [390
       await page.screenshot({ path: path.join(OUT, `${label}-${view}.png`) });
     }
     await startWrittenQuiz(page, setId, 3);
-    for (const g of ['chess', 'solitaire', '2048', 'tetris']) {
+    for (const g of ['chess', 'solitaire', '2048', 'blocks']) {
       await page.evaluate(id => { SS.play.setGame(id); SS.play.state.panel.pane = 'game'; SS.play.save(); }, g);
       if (await page.isVisible('.qz-switch')) await page.click('.qz-switch [data-value="game"]');
       await page.waitForTimeout(g === 'chess' ? 900 : 300);
-      const box = await page.evaluate(() => { const p = document.querySelector('.gp-body').getBoundingClientRect(); const b = document.querySelector('.ss-chess-board, .ag-sol-board, .ag-2048-board, .ag-tetris-board').getBoundingClientRect(); return { pw: p.width, bw: b.width, bl: b.left - p.left, br: p.right - b.right }; });
+      const box = await page.evaluate(() => { const p = document.querySelector('.gp-body').getBoundingClientRect(); const b = document.querySelector('.ss-chess-board, .ag-sol-board, .ag-2048-board, .ag-bb-board').getBoundingClientRect(); return { pw: p.width, bw: b.width, bl: b.left - p.left, br: p.right - b.right }; });
+      console.log(`      ${label} ${g}: board ${Math.round(box.bw)}px in a ${Math.round(box.pw)}px panel`);
       assert(box.bw >= 150, `${g}: board legible (${Math.round(box.bw)}px)`);
       assert(box.bl >= -1 && box.br >= -1, `${g}: board inside panel`);
       const o = await page.evaluate(() => document.scrollingElement.scrollWidth - innerWidth);
