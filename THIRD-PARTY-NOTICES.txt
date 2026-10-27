@@ -1,0 +1,24 @@
+Studyspace chess dependencies
+
+chess.js 1.4.0
+Copyright (c) 2025, Jeff Hlywa (jhlywa@gmail.com)
+License: BSD-2-Clause, included as CHESS-LICENSE.txt.
+Source: https://github.com/jhlywa/chess.js/tree/v1.4.0
+Distribution source: https://unpkg.com/chess.js@1.4.0/dist/esm/chess.js
+Local change: wrapped in an IIFE and changed ESM export to window.Chess.
+
+Stockfish.js 19.0.1, lite single-threaded build
+Stockfish.js 19 (c) 2026, Chess.com, LLC.
+Based on Stockfish (c) T. Romstad, M. Costalba, J. Kiiski,
+G. Linscott and other contributors.
+License: GNU GPLv3, included as STOCKFISH-LICENSE.txt.
+Unmodified binaries from the npm package stockfish@19.0.1:
+https://unpkg.com/stockfish@19.0.1/bin/stockfish-19-lite-single.js
+https://unpkg.com/stockfish@19.0.1/bin/stockfish-19-lite-single.wasm
+Corresponding source is included as STOCKFISH-SOURCE.tar.gz from
+https://github.com/nmrugg/stockfish.js/tree/17db38ef4b9b9657f3457bb78174ef9ea8be0886
+The source archive includes build scripts and source code; its package.json
+matches the published stockfish@19.0.1 package byte for byte.
+For neural network and build-tool download instructions see the source archive.
+Stockfish.js: https://github.com/nmrugg/stockfish.js
+Stockfish: https://github.com/official-stockfish/Stockfish
