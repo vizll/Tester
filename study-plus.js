@@ -13,6 +13,8 @@
   const MAX_COUNTED = 400;
   const counts = v => Object.fromEntries(GAMES.map(id => [id, Math.max(0, Math.min(1e6, Math.floor(Number(v && v[id]) || 0)))]));
   const QUIZ_MODES = ['mixed', 'choice', 'written', 'tf'];
+  // only well-formed base64 images: these end up in CSS url("…") and <img src>
+  const IMAGE_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+=*$/;
 
   /* Profile looks — every one is free to use (they used to be bought with points) */
   const BANNERS = {
@@ -92,7 +94,7 @@
     const pr = U.isObj(raw.profile) ? raw.profile : {};
     s.profile = {
       name: U.str(pr.name, 40), bio: typeof pr.bio === 'string' ? pr.bio.slice(0, 160) : s.profile.bio,
-      avatar: /^data:image\//.test(pr.avatar) ? pr.avatar : '', bannerImage: /^data:image\//.test(pr.bannerImage) ? pr.bannerImage : '',
+      avatar: IMAGE_RE.test(pr.avatar || '') ? pr.avatar : '', bannerImage: IMAGE_RE.test(pr.bannerImage || '') ? pr.bannerImage : '',
       banner: BANNERS[pr.banner] ? pr.banner : 'aurora', frame: FRAMES[pr.frame] ? pr.frame : 'simple',
       simpleFrame: U.hex(pr.simpleFrame, '#ffffff')
     };

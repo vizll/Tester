@@ -37,7 +37,7 @@
       white: U.hex(raw.white, DEFAULT_PREFS.white), black: U.hex(raw.black, DEFAULT_PREFS.black), dark: U.hex(raw.dark, DEFAULT_PREFS.dark),
       font: typeof raw.font === 'string' && /^[\w\s-]{1,40}$/.test(raw.font) ? raw.font : DEFAULT_PREFS.font,
       fog: U.clampNum(raw.fog, 0, 20, 8),
-      image: typeof raw.image === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(raw.image) && raw.image.length < 3e6 ? raw.image : ''
+      image: typeof raw.image === 'string' && raw.image.length < 3e6 && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(raw.image) ? raw.image : ''
     };
     const g = flat ? data : data.game;
     const history = (U.isObj(g) && Array.isArray(g.history) ? g.history : []).filter(m => typeof m === 'string' && /^[\w=+#-]{2,8}$/.test(m)).slice(0, 1200);
