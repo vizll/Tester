@@ -1,0 +1,116 @@
+{
+  "name": "tester-desktop",
+  "productName": "Tester",
+  "version": "3.0.0",
+  "description": "Tester \u2014 your personal study desk, as a desktop app for macOS and Windows.",
+  "author": "Tester",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "copy-web": "node scripts/copy-web.js",
+    "start": "npm run copy-web && electron .",
+    "dist:mac": "npm run copy-web && electron-builder --mac --publish never",
+    "dist:win": "npm run copy-web && electron-builder --win --publish never",
+    "dist:linux": "npm run copy-web && electron-builder --linux --publish never",
+    "dist": "npm run copy-web && electron-builder --mac --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "app.tester.desk",
+    "productName": "Tester",
+    "copyright": "Tester",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "desktop.css",
+      "web/**/*"
+    ],
+    "asar": true,
+    "afterPack": "scripts/after-pack.js",
+    "mac": {
+      "category": "public.app-category.education",
+      "icon": "build/icon.icns",
+      "identity": null,
+      "hardenedRuntime": false,
+      "darkModeSupport": true,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Tester-${version}-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "title": "Tester",
+      "contents": [
+        {
+          "x": 150,
+          "y": 190
+        },
+        {
+          "x": 390,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tester",
+      "artifactName": "Tester-${version}-windows-${arch}-setup.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Education",
+      "target": [
+        "AppImage"
+      ],
+      "artifactName": "Tester-${version}-linux-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Tester-${version}-windows-${arch}-portable.${ext}"
+    }
+  }
+}

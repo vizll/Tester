@@ -1,0 +1,38 @@
+# XcodeGen spec for the Tester iOS/iPadOS app. `build-ipa.sh` copies the web app into ./www,
+# generates Tester.xcodeproj from this file and builds an unsigned .ipa for SideStore / AltStore.
+name: Tester
+options:
+  bundleIdPrefix: app.tester
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "3.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Tester:
+    type: application
+    platform: iOS
+    sources:
+      - path: Tester
+      - path: www
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: Tester
+        PRODUCT_BUNDLE_IDENTIFIER: app.tester.desk
+        INFOPLIST_FILE: Tester/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: NO
+        ENABLE_BITCODE: NO
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+        DEVELOPMENT_TEAM: ""
+    scheme: {}

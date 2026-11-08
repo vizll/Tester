@@ -1,0 +1,22 @@
+/* Desktop app polish, injected by main.js. Only applies inside the app (html.app-shell). */
+
+/* macOS: the hidden title bar. The top bar and the strip above the sidebar drag the window;
+   controls inside stay clickable. */
+html.app-darwin .topbar { -webkit-app-region: drag; }
+html.app-darwin .topbar :is(button, a, input, select, textarea, label, [role="button"], [tabindex]) { -webkit-app-region: no-drag; }
+html.app-darwin body::before { content: ''; position: fixed; z-index: 1; left: 0; right: 0; top: 0; height: 12px; -webkit-app-region: drag; }
+html.app-darwin body::after { content: ''; position: fixed; z-index: 1; left: 0; top: 0; width: calc(var(--nav-w, 248px) + 32px); height: 46px; -webkit-app-region: drag; }
+html.app-darwin body.nav-collapsed::after { width: calc(var(--nav-rail, 66px) + 32px); }
+/* leave room for the traffic lights above the sidebar */
+html.app-darwin .nav-side { top: 46px; }
+html.app-darwin body:has(.nav-profile.compact) .nav-collapse { top: 22px; }
+html.app-darwin dialog, html.app-darwin .ctx-menu, html.app-darwin .nav-side { -webkit-app-region: no-drag; }
+@media (max-width: 700px) {
+  /* narrow window: the sidebar is a drawer, so the top bar makes room for the traffic lights instead */
+  html.app-darwin .topbar { padding-left: 84px; }
+  html.app-darwin .nav-side { top: 0; padding-top: 34px; }
+  html.app-darwin body::after { width: 84px; }
+}
+
+/* No text selection on app chrome; content stays selectable */
+html.app-shell .topbar, html.app-shell .nav-side .nav-item, html.app-shell .qz-tab, html.app-shell .w-head { -webkit-user-select: none; user-select: none; }

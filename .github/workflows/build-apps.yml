@@ -1,0 +1,87 @@
+# Builds Tester for macOS (.dmg/.zip), Windows (installer + portable .exe) and iOS (unsigned .ipa for
+# SideStore/AltStore) on GitHub's own Mac and Windows machines. Run it from the Actions tab
+# ("Build apps" → Run workflow), or push a tag like v3.0.0 to also publish a Release.
+name: Build apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['app-builds']
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            script: dist:mac
+            files: |
+              apps/desktop/release/*.dmg
+              apps/desktop/release/*.zip
+          - name: Windows
+            os: windows-latest
+            script: dist:win
+            files: |
+              apps/desktop/release/*.exe
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run ${{ matrix.script }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tester-${{ matrix.name }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  ios:
+    name: iOS (unsigned .ipa)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: bash apps/ios/build-ipa.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Tester-iOS
+          path: apps/release/Tester.ipa
+          if-no-files-found: error
+
+  # Tags publish a release; pushes to the app-builds branch publish a pre-release with the same files,
+  # so the .dmg, .exe and .ipa can be downloaded from the repository's Releases page.
+  release:
+    name: Publish release
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/app-builds') }}
+    needs: [desktop, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('app-build-{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Tester apps (build {0})', github.run_number) }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          body: |
+            Tester for macOS (.dmg — arm64 for Apple Silicon, x64 for Intel), Windows (setup.exe installer or portable .exe) and iPhone/iPad (unsigned Tester.ipa for SideStore/AltStore).
+            The apps are unsigned: see apps/README.md for first-launch steps.

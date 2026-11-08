@@ -1,0 +1,10 @@
+.DS_Store
+dist.backup-*/
+apps/desktop/node_modules/
+apps/desktop/web/
+apps/desktop/release/
+apps/ios/www/
+apps/ios/build/
+apps/ios/Payload/
+apps/ios/Tester.xcodeproj/
+apps/release/
