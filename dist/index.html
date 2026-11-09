@@ -1507,6 +1507,7 @@ dialog .wl-desc { color: var(--ui-muted); }
 /* Quick add */
 .qa-row { display: flex; gap: 8px; margin: 12px 0 6px; }
 .qa-input { font-size: 1rem; min-height: 44px; }
+.qa-mic { flex: 0 0 auto; width: 44px; min-height: 44px; padding: 0; justify-content: center; border-radius: 50%; color: var(--accent); }
 .qa-more { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
 .qa-btn { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--ui-fill); font-size: .84rem; font-weight: 600; text-align: left; }
 .qa-btn:hover { background: var(--ui-fill-2); }
@@ -1883,7 +1884,9 @@ dialog .wl-desc { color: var(--ui-muted); }
     leaf: 'M5 19c0-9 6-14 15-14 0 9-5 15-14 15M5 19l7-7',
     rain: 'M7 15a5 5 0 1 1 1.5-9.8A6 6 0 0 1 20 9a4 4 0 0 1-2 6M8 18l-1 3M12 18l-1 3M16 18l-1 3',
     wave: 'M2 10c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-1.5 5 0M2 16c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 3.5-1.5 5 0',
-    noise: 'M3 12h2l2-6 3 12 3-9 2 6 2-3h4'
+    noise: 'M3 12h2l2-6 3 12 3-9 2 6 2-3h4',
+    mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7',
+    phone: 'M7.5 2.5h9a1.5 1.5 0 0 1 1.5 1.5v16a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 20V4a1.5 1.5 0 0 1 1.5-1.5zM10.5 18.5h3'
   };
   SS.icon = function icon(name, size = 18, extraClass = '') {
     const ns = 'http://www.w3.org/2000/svg';
@@ -8443,6 +8446,10 @@ dialog .wl-desc { color: var(--ui-muted); }
       const brand = SS.ui.input({ value: p.brand, placeholder: 'Tester', label: 'Site name', maxLength: 40 });
       brand.addEventListener('input', U.debounce(() => SS.prefs.set('brand', brand.value.trim() || 'Tester'), 250));
       body.append(el('h3.panel-h', { text: 'Make it yours' }), SS.ui.field('Your name', name), SS.ui.field('Site name', brand, 'Shown in the top bar and browser tab.'));
+      // iPhone/iPad app only: home-screen widgets and hands-free to-dos (Action button, Back Tap, Siri)
+      if (SS.native) body.append(el('h3.panel-h', { text: 'iPhone extras' }),
+        el('p.hint', { text: 'Add Tester widgets to your Home Screen, and set the Action button or Back Tap to “Voice To-Do”: say “Chem homework” and it lands on your to-do list.' }),
+        el('div.row-gap', { style: { marginTop: '10px' } }, el('button.btn.btn-sm', { type: 'button', on: { click: () => SS.native.voice() } }, SS.icon('mic', 14), 'Try a voice to-do'), el('button.btn.btn-sm', { type: 'button', on: { click: () => SS.native.setup() } }, SS.icon('phone', 14), 'Widgets & Action button setup')));
       body.append(el('h3.panel-h', { text: 'Motion & performance' }),
         SS.ui.field('Animations', SS.ui.segmented({ label: 'Animations', value: p.motion, options: [{ value: 'system', label: 'Follow device' }, { value: 'reduce', label: 'Reduced' }, { value: 'full', label: 'Full' }], onChange: v => SS.prefs.set('motion', v) })),
         SS.ui.toggle({ label: 'Performance mode', hint: 'Turns off glass blur, animated backgrounds and floating stickers. Helpful on older laptops and Chromebooks.', value: p.performance, onChange: v => SS.prefs.set('performance', v) }));
@@ -8673,7 +8680,8 @@ dialog .wl-desc { color: var(--ui-muted); }
       ['bell', 'Reminder', () => SS.editors.reminder()], ['hourglass', 'Countdown', () => SS.editors.countdown()], ['cards', 'Study set', () => SS.cards.edit(null, { subjectId: sid() })],
       ['cap', 'Subject / class', () => SS.editors.subject()], ['table', 'Class time', () => SS.editors.timetable(null, { day: new Date().getDay() || 1, subjectId: sid(), title: SS.data.subject(sid())?.name || '' })], ['link', 'Link', () => SS.editors.link()]
     ].map(([icon, label, fn]) => el('button.qa-btn', { type: 'button', on: { click: () => { dlg.close(); setTimeout(fn, 30); } } }, SS.icon(icon, 16), el('span', { text: label }))));
-    dlg.body.append(ctxChip, types, el('div.qa-row', input, el('button.btn.btn-primary', { type: 'button', on: { click: go } }, 'Add')), el('p.hint', { text: 'Understands “tomorrow”, weekdays, “oct 12”, “in 3 days”, “5pm”, #subject and ! for high priority.' }), el('h3.panel-h', { text: 'Or open a full form' }), more);
+    const mic = SS.native && SS.native.voice ? el('button.btn.qa-mic', { type: 'button', title: 'Say it', aria: { label: 'Add a to-do by voice' }, on: { click: () => { dlg.close(); SS.native.voice(); } } }, SS.icon('mic', 18)) : null;
+    dlg.body.append(ctxChip, types, el('div.qa-row', input, mic, el('button.btn.btn-primary', { type: 'button', on: { click: go } }, 'Add')), el('p.hint', { text: 'Understands “tomorrow”, weekdays, “oct 12”, “in 3 days”, “5pm”, #subject and ! for high priority.' }), el('h3.panel-h', { text: 'Or open a full form' }), more);
     requestAnimationFrame(() => input.focus());
   };
 
@@ -9115,6 +9123,7 @@ dialog .wl-desc { color: var(--ui-muted); }
       SS.reminders.start();
       SS.gcal.init();
       document.documentElement.classList.remove('booting');
+      SS.booted = true; SS.bus.emit('booted');   // the iPhone/iPad app waits for this before syncing widgets
       if (notices.length) SS.ui.toast(`Some saved data (${notices.join(', ')}) couldn’t be read. A copy was kept and the rest loaded normally.`, { kind: 'error', timeout: 0 });
       if (SS.store.mode === 'memory') SS.ui.toast('This browser is blocking storage, so changes won’t be kept after you close the tab. Export a backup from Customize → Data.', { kind: 'error', timeout: 0 });
       if (isNew || (meta.migratedFrom && !SS.prefs.get('upgradeSeen')) || !SS.prefs.get('onboarded')) setTimeout(() => SS.panels.welcome(), 350);

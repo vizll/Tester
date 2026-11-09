@@ -8,3 +8,4 @@ apps/ios/build/
 apps/ios/Payload/
 apps/ios/Tester.xcodeproj/
 apps/release/
+apps/ios/build.log

@@ -76,6 +76,22 @@ cd "Tester 3.0/apps/ios"
 * **iPhone/iPad**: the gradient runs edge to edge behind the notch and home indicator, the status bar
   follows light or dark styles, and photos/files can be picked for backgrounds, covers and backup restore.
 
+### iPhone widgets and hands-free to-dos (iOS 17+)
+
+* **Widgets** — *Up Next* (what's due, late work first; Home and Lock Screen), *To-Do* (tick items off
+  right on the widget, mic button to add by voice) and *Voice To-Do* (a one-tap mic). On iOS 18+ there's
+  also a **Voice To-Do control** for Control Center, the Lock Screen and the Action button.
+* **Voice To-Do** — opens Tester listening; say “Chem homework” (dates work: “due Friday”) and it's added
+  when you pause. Speech is turned into text on the device when the iPhone supports it.
+* **Action button**: Settings → Action Button → Shortcut → Tester → **Voice To-Do**.
+  **Back Tap**: add Voice To-Do to your shortcuts in the Shortcuts app, then Settings → Accessibility →
+  Touch → Back Tap → Double/Triple Tap → Voice To-Do. **Siri**: “Add a to-do in Tester”.
+* To add without opening the app, build a shortcut with **Dictate Text → Add To-Do (Tester)**.
+* The app and widgets share data through an app group. SideStore/AltStore register it when they sign
+  the app; keep app extensions enabled when installing. Open Tester once after installing so the
+  widgets have something to show. A free Apple ID uses one extra App ID for the widget extension.
+* In the app: Customize → General → **iPhone extras**, or the mic in Quick add.
+
 ### Known limits
 
 * **Google Calendar sign-in** (the optional read-only sync) only works in the browser version, because

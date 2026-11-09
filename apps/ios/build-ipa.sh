@@ -22,13 +22,28 @@ xcodegen generate --quiet
 
 echo "• Building (unsigned)"
 rm -rf build
-xcodebuild -project Tester.xcodeproj -scheme Tester -configuration Release \
+if ! xcodebuild -project Tester.xcodeproj -scheme Tester -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-  build | { command -v xcpretty >/dev/null && xcpretty || cat; }
+  build > build.log 2>&1; then
+  # GitHub Actions shows these lines as annotations on the run
+  grep -E "(error|fatal error):" build.log | sort -u | head -12 | while IFS= read -r line; do echo "::error::${line}"; done
+  tail -60 build.log
+  echo "Build failed (full log: apps/ios/build.log)" >&2
+  exit 1
+fi
+grep -E "warning:" build.log | sort -u | head -5 || true
 
 APP="build/Build/Products/Release-iphoneos/Tester.app"
 [ -d "$APP" ] || { echo "Build failed: $APP not found" >&2; exit 1; }
+[ -d "$APP/PlugIns/TesterWidgets.appex" ] || { echo "::error::Widget extension missing from the app" >&2; exit 1; }
+
+# Ad-hoc signing only records the entitlements (the shared app group for widgets). SideStore and
+# AltStore read them, register the group with your Apple ID and re-sign everything with it.
+echo "• Recording entitlements"
+codesign --force --sign - --timestamp=none --entitlements Widgets/TesterWidgets.entitlements "$APP/PlugIns/TesterWidgets.appex"
+codesign --force --sign - --timestamp=none --entitlements Tester/Tester.entitlements "$APP"
+codesign -d --entitlements - "$APP" 2>/dev/null | grep -q "application-groups" || echo "::warning::App group entitlement not found after signing"
 
 echo "• Packaging Tester.ipa"
 rm -rf Payload && mkdir Payload && cp -R "$APP" Payload/

@@ -23,8 +23,22 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: windowScene)
         window.backgroundColor = UIColor(named: "LaunchBackground")
-        window.rootViewController = WebViewController()
+        let web = WebViewController()
+        window.rootViewController = web
         window.makeKeyAndVisible()
         self.window = window
+        self.web = web
+        if let url = connectionOptions.urlContexts.first?.url { web.handle(url: url) }
+    }
+
+    private var web: WebViewController?
+
+    // testerapp://voice and friends, from widgets and controls
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        if let url = URLContexts.first?.url { web?.handle(url: url) }
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        web?.appBecameActive()
     }
 }

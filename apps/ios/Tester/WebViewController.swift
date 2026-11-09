@@ -1,3 +1,4 @@
+import SwiftUI
 import UIKit
 import WebKit
 
@@ -6,6 +7,11 @@ import WebKit
 final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private var webView: WKWebView!
     private var pageIsDark = false
+    /// the page has loaded your data and can take queued to-dos
+    private var pageReady = false
+    private var flushing = false
+    private var wantsVoice = false
+    private var observers: [NSObjectProtocol] = []
     private static let home = URL(string: "\(AppSchemeHandler.scheme)://localhost/index.html")!
     private static let external: Set<String> = ["http", "https", "mailto", "tel", "sms"]
 
@@ -22,6 +28,7 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         let bridge = ScriptBridge(owner: self)
         content.add(bridge, name: "testerSave")
         content.add(bridge, name: "testerChrome")
+        content.add(bridge, name: "testerWidgets")
         content.addUserScript(WKUserScript(source: Shell.startScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         content.addUserScript(WKUserScript(source: Shell.endScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
 
@@ -43,6 +50,120 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
     override func viewDidLoad() {
         super.viewDidLoad()
         webView.load(URLRequest(url: Self.home))
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: .testerInboxChanged, object: nil, queue: .main) { [weak self] _ in self?.flushQueues() })
+        observers.append(center.addObserver(forName: .testerVoiceRequested, object: nil, queue: .main) { [weak self] _ in
+            _ = TesterStore.shared.consumeVoiceRequest()
+            self?.presentVoice()
+        })
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if wantsVoice { presentVoice() }
+    }
+
+    deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+
+    // MARK: - Widgets, Siri and voice to-dos
+
+    /// Opened by a widget, a control or a link: testerapp://voice, testerapp://add?text=…, testerapp://setup
+    func handle(url: URL) {
+        guard url.scheme?.lowercased() == "testerapp" else { return }
+        switch url.host?.lowercased() ?? "" {
+        case "voice":
+            presentVoice()
+        case "setup":
+            presentSetup()
+        case "add":
+            let text = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "text" })?.value ?? ""
+            if TesterStore.shared.enqueue(text) != nil { flushQueues() }
+        default:
+            break
+        }
+    }
+
+    /// Called whenever Tester comes to the front.
+    func appBecameActive() {
+        flushQueues()
+        if TesterStore.shared.consumeVoiceRequest() { presentVoice() }
+        if pageReady { webView.evaluateJavaScript("window.TesterNative && TesterNative.refresh()", completionHandler: nil) }
+    }
+
+    func presentVoice() {
+        guard isViewLoaded, view.window != nil else { wantsVoice = true; return }
+        wantsVoice = false
+        if let shown = presentedViewController {
+            if shown is VoiceSheetController { return }
+            shown.dismiss(animated: true) { [weak self] in self?.presentVoice() }
+            return
+        }
+        let sheet = VoiceSheetController(rootView: AnyView(EmptyView()))
+        sheet.rootView = AnyView(VoiceCaptureView(
+            onAdd: { [weak self] text in
+                TesterStore.shared.enqueue(text)
+                self?.flushQueues()
+            },
+            onClose: { [weak sheet] in sheet?.dismiss(animated: true) },
+            onSetup: { [weak self, weak sheet] in sheet?.dismiss(animated: true) { self?.presentSetup() } }
+        ))
+        sheet.modalPresentationStyle = .pageSheet
+        if let s = sheet.sheetPresentationController {
+            s.detents = [.custom(identifier: .init(rawValue: "voice")) { _ in 470 }, .large()]
+            s.prefersGrabberVisible = false
+            s.preferredCornerRadius = 28
+        }
+        present(sheet, animated: true)
+    }
+
+    func presentSetup() {
+        guard isViewLoaded, view.window != nil else { return }
+        if presentedViewController != nil {
+            presentedViewController?.dismiss(animated: true) { [weak self] in self?.presentSetup() }
+            return
+        }
+        let guide = UIHostingController(rootView: AnyView(EmptyView()))
+        guide.rootView = AnyView(SetupGuideView(
+            onTry: { [weak self, weak guide] in guide?.dismiss(animated: true) { self?.presentVoice() } },
+            onClose: { [weak guide] in guide?.dismiss(animated: true) }
+        ))
+        guide.modalPresentationStyle = .pageSheet
+        present(guide, animated: true)
+    }
+
+    fileprivate func pageDidBoot() {
+        pageReady = true
+        flushQueues()
+    }
+
+    fileprivate func saveWidgetSnapshot(_ json: String) {
+        DispatchQueue.global(qos: .utility).async { TesterStore.shared.saveSnapshot(json: json) }
+    }
+
+    /// Adds queued to-dos and applies widget checkmarks inside the page.
+    func flushQueues() {
+        guard pageReady, !flushing else { return }
+        let store = TesterStore.shared
+        let inbox = store.inbox
+        let completions = store.completions
+        guard !inbox.isEmpty || !completions.isEmpty else { return }
+        let payload: [String: Any] = [
+            "inbox": inbox.map { ["id": $0.id, "text": $0.text] },
+            "completions": completions.map { ["id": $0.id] }
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload), let json = String(data: data, encoding: .utf8) else { return }
+        flushing = true
+        webView.evaluateJavaScript("window.TesterNative ? TesterNative.apply(\(json)) : ''") { [weak self] result, _ in
+            self?.flushing = false
+            guard let text = result as? String, let out = text.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: out) as? [String: Any] else { return }
+            let added = Set(((obj["added"] as? [[String: Any]]) ?? []).compactMap { $0["inbox"] as? String })
+            let completed = Set(((obj["completed"] as? [String]) ?? []))
+            store.removeInbox(ids: added)
+            store.removeCompletions(ids: completed)
+            // anything queued while this ran
+            if store.inbox.contains(where: { !added.contains($0.id) }) { self?.flushQueues() }
+        }
     }
 
     override var preferredStatusBarStyle: UIStatusBarStyle { pageIsDark ? .lightContent : .darkContent }
@@ -81,6 +202,7 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        pageReady = false
         webView.reload()
     }
 
@@ -140,8 +262,19 @@ private final class ScriptBridge: NSObject, WKScriptMessageHandler {
             if let name = body["filename"] as? String, let data = body["data"] as? String { owner?.save(filename: name, base64: data) }
         case "testerChrome":
             owner?.setPage(dark: (body["dark"] as? Bool) ?? false)
+        case "testerWidgets":
+            switch (body["type"] as? String) ?? "" {
+            case "ready": owner?.pageDidBoot()
+            case "snapshot": if let json = body["json"] as? String { owner?.saveWidgetSnapshot(json) }
+            case "voice": owner?.presentVoice()
+            case "setup": owner?.presentSetup()
+            default: break
+            }
         default:
             break
         }
     }
 }
+
+/// Marks the voice sheet so it isn't stacked twice.
+final class VoiceSheetController: UIHostingController<AnyView> {}

@@ -69,5 +69,20 @@
 	<string>Choose photos for backgrounds, class covers and notes.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo of your notes to turn them into text.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Say a to-do (like “Chem homework”) and Tester adds it to your list.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Tester turns what you say into a to-do. On most iPhones this happens on the device.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.tester.desk</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>testerapp</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
